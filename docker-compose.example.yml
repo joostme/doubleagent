@@ -1,0 +1,92 @@
+# doubleagent - AI Safety Sidecar Proxy
+#
+# This example demonstrates how to use doubleagent as a transparent intercepting
+# proxy sidecar for an AI agent container.
+#
+# Architecture:
+#   - doubleagent owns the network namespace (CAP_NET_ADMIN)
+#   - ai-agent shares doubleagent's network via network_mode: "service:doubleagent"
+#   - All outgoing HTTP/HTTPS traffic from ai-agent is intercepted by doubleagent
+#   - doubleagent runs mitmproxy in transparent mode under the hood
+#   - doubleagent injects real API keys (replacing placeholders) and blocks forbidden calls
+#   - The AI agent never sees the real API keys
+#
+# Usage:
+#   1. Copy config/config.example.json to config.json and edit it
+#   2. Set your real API keys as environment variables (or in .env file)
+#   3. Run: docker compose up
+#
+# The AI container should:
+#   - Use network_mode: "service:doubleagent" to route all traffic through the sidecar
+#   - Mount the shared certs volume and install the CA cert in its trust store
+#   - Only use placeholder API keys in its environment
+
+services:
+  # ---- doubleagent sidecar (owns the network) ----
+  doubleagent:
+    build: .
+    cap_add:
+      - NET_ADMIN  # Required for iptables rules
+    volumes:
+      - certs:/certs                         # CA cert shared with AI container
+      - ./config.json:/config/config.json:ro # Proxy configuration
+    environment:
+      # Real API keys - only the sidecar knows these
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+    # Expose any ports that the AI agent needs to be reachable on
+    # (since ai-agent shares this network namespace)
+    # ports:
+    #   - "3000:3000"  # Example: AI agent web UI
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:9000/healthz"]
+      interval: 5s
+      timeout: 3s
+      start_period: 10s
+      retries: 3
+    restart: unless-stopped
+
+  # ---- AI agent container (uses doubleagent's network) ----
+  ai-agent:
+    image: my-ai-agent:latest  # Replace with your AI agent image
+    network_mode: "service:doubleagent"
+    depends_on:
+      doubleagent:
+        condition: service_healthy
+    volumes:
+      # Mount the CA cert so the AI container trusts our MITM proxy.
+      # The exact path depends on the base image:
+      #   - Debian/Ubuntu: /usr/local/share/ca-certificates/
+      #   - Alpine: /usr/local/share/ca-certificates/
+      #   - RHEL/Fedora: /etc/pki/ca-trust/source/anchors/
+      # You must also run update-ca-certificates in the container's entrypoint.
+      - certs:/usr/local/share/ca-certificates/doubleagent:ro
+    environment:
+      # Placeholder keys - these are replaced by doubleagent with real keys
+      - OPENAI_API_KEY=PLACEHOLDER_OPENAI_KEY
+      - ANTHROPIC_API_KEY=PLACEHOLDER_ANTHROPIC_KEY
+      - GITHUB_TOKEN=PLACEHOLDER_GITHUB_TOKEN
+
+      # --- CA trust for runtimes that don't use the system store ---
+      # Node.js: does NOT use system CAs by default
+      - NODE_EXTRA_CA_CERTS=/usr/local/share/ca-certificates/doubleagent/ca.crt
+      # Python (requests/httpx/urllib3): usually uses system CAs via certifi,
+      # but set this to be safe, especially in virtualenvs
+      - REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
+      - SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
+      # Ruby (net/http)
+      - SSL_CERT_DIR=/usr/local/share/ca-certificates/doubleagent
+      # Java: requires keytool import into the JVM truststore — see below
+
+    # Install the CA cert into the system trust store at startup.
+    # This covers Go, curl, wget, Python (certifi), and most other tools.
+    # For Java, add: keytool -importcert -noprompt -keystore $JAVA_HOME/lib/security/cacerts \
+    #   -storepass changeit -alias doubleagent -file /usr/local/share/ca-certificates/doubleagent/ca.crt
+    #
+    # Replace "your-original-command" with the AI agent's actual entrypoint.
+    # command: >
+    #   sh -c "update-ca-certificates 2>/dev/null; exec your-original-command"
+
+volumes:
+  certs:

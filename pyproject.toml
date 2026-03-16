@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "doubleagent"
+version = "1.0.0"
+description = "Transparent intercepting proxy sidecar for AI containers"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "mitmproxy>=11,<12",
+  "pydantic>=2,<3",
+]
+
+[project.scripts]
+doubleagent = "doubleagent.main:main"
+
+[tool.setuptools]
+packages = ["doubleagent"]

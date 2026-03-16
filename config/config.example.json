@@ -1,0 +1,93 @@
+{
+  "log_level": "info",
+  "ca": {
+    "cert_path": "/certs/ca.crt"
+  },
+  "http_port": 8080,
+  "https_port": 8443,
+  "proxy_uid": 1000,
+  "allow_http_secret_injection": false,
+  "rules": [
+    {
+      "domains": ["api.openai.com"],
+      "secrets": [
+        {
+          "placeholder": "PLACEHOLDER_OPENAI_KEY",
+          "value_from_env": "OPENAI_API_KEY",
+          "inject_in": ["header:Authorization"],
+          "prefix": "Bearer "
+        }
+      ],
+      "block": [
+        {
+          "method": "DELETE",
+          "path_pattern": "/v1/files/*",
+          "response": {
+            "status": 403,
+            "body": {
+              "error": "blocked",
+              "reason": "File deletion is not permitted by doubleagent policy"
+            }
+          }
+        },
+        {
+          "method": "DELETE",
+          "path_pattern": "/v1/assistants/*",
+          "response": {
+            "status": 403,
+            "body": {
+              "error": "blocked",
+              "reason": "Assistant deletion is not permitted by doubleagent policy"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "domains": ["*.anthropic.com"],
+      "secrets": [
+        {
+          "placeholder": "PLACEHOLDER_ANTHROPIC_KEY",
+          "value_from_env": "ANTHROPIC_API_KEY",
+          "inject_in": ["header:x-api-key"]
+        }
+      ]
+    },
+    {
+      "domains": ["api.github.com"],
+      "secrets": [
+        {
+          "placeholder": "PLACEHOLDER_GITHUB_TOKEN",
+          "value_from_env": "GITHUB_TOKEN",
+          "inject_in": ["header:Authorization"],
+          "prefix": "Bearer "
+        }
+      ],
+      "block": [
+        {
+          "method": "DELETE",
+          "path_pattern": "/repos/*/*",
+          "response": {
+            "status": 403,
+            "body": {
+              "error": "blocked",
+              "reason": "Repository deletion is not permitted by doubleagent policy"
+            }
+          }
+        },
+        {
+          "method": "PUT",
+          "path_pattern": "/repos/*/transfer",
+          "response": {
+            "status": 403,
+            "body": {
+              "error": "blocked",
+              "reason": "Repository transfer is not permitted by doubleagent policy"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "default_policy": "allow"
+}
