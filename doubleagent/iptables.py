@@ -89,15 +89,12 @@ def _ensure_jump(binary: str, parent: str, child: str, logger: logging.Logger) -
 def _setup_family(
     binary: str,
     output_chain: str,
-    prerouting_chain: str,
     intercept_port: int,
     proxy_cgroup_path: str,
     logger: logging.Logger,
 ) -> None:
     _create_chain(binary, output_chain, logger)
-    _create_chain(binary, prerouting_chain, logger)
     _flush_chain(binary, output_chain, logger)
-    _flush_chain(binary, prerouting_chain, logger)
 
     output_rules = [
         ["-t", "nat", "-A", output_chain, "-m", "cgroup", "--path", proxy_cgroup_path, "-j", "RETURN"],
@@ -106,18 +103,11 @@ def _setup_family(
         ["-t", "nat", "-A", output_chain, "-p", "tcp", "--dport", "443", "-j", "REDIRECT", "--to-ports", str(intercept_port)],
         ["-t", "nat", "-A", output_chain, "-p", "tcp", "-j", "REDIRECT", "--to-ports", str(intercept_port)],
     ]
-    prerouting_rules = [
-        ["-t", "nat", "-A", prerouting_chain, "-i", "lo", "-j", "RETURN"],
-        ["-t", "nat", "-A", prerouting_chain, "-p", "tcp", "--dport", "80", "-j", "REDIRECT", "--to-ports", str(intercept_port)],
-        ["-t", "nat", "-A", prerouting_chain, "-p", "tcp", "--dport", "443", "-j", "REDIRECT", "--to-ports", str(intercept_port)],
-        ["-t", "nat", "-A", prerouting_chain, "-p", "tcp", "-j", "REDIRECT", "--to-ports", str(intercept_port)],
-    ]
 
-    for args in output_rules + prerouting_rules:
+    for args in output_rules:
         _run(binary, args, logger)
 
     _ensure_jump(binary, "OUTPUT", output_chain, logger)
-    _ensure_jump(binary, "PREROUTING", prerouting_chain, logger)
 
 
 def setup(intercept_port: int, proxy_cgroup_path: str, logger: logging.Logger) -> None:
@@ -126,9 +116,9 @@ def setup(intercept_port: int, proxy_cgroup_path: str, logger: logging.Logger) -
         extra={"intercept_port": intercept_port, "proxy_cgroup_path": proxy_cgroup_path},
     )
     cleanup(logger, log_missing=False)
-    _setup_family("iptables", OUTPUT_CHAIN_V4, PREROUTING_CHAIN_V4, intercept_port, proxy_cgroup_path, logger)
+    _setup_family("iptables", OUTPUT_CHAIN_V4, intercept_port, proxy_cgroup_path, logger)
     try:
-        _setup_family("ip6tables", OUTPUT_CHAIN_V6, PREROUTING_CHAIN_V6, intercept_port, proxy_cgroup_path, logger)
+        _setup_family("ip6tables", OUTPUT_CHAIN_V6, intercept_port, proxy_cgroup_path, logger)
     except RuntimeError as exc:
         logger.warning("failed to set up ip6tables rules: %s", exc)
     logger.info("iptables rules installed successfully")
