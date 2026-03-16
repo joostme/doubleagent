@@ -24,6 +24,7 @@ doubleagent solves this by acting as a **double agent**: it pretends to be a tra
 - **Secret injection** — The AI only sees placeholder keys. doubleagent swaps them for real credentials in-flight, in headers, query params, or request bodies.
 - **Request blocking** — Block dangerous API calls by method and path pattern. `DELETE /repos/*/*`? Blocked. `POST /v1/chat/completions`? Allowed.
 - **Transparent** — No proxy config needed. iptables + mitmproxy transparent mode capture all traffic automatically.
+- **Identity hardening** — The proxy bypass is tied to the proxy process cgroup, not just a numeric UID/GID that another container might share.
 - **Hot-reload** — Update rules without restarting.
 
 ## Quick start
@@ -127,6 +128,15 @@ Internally, mitmproxy transparent mode listens on a single intercept port. `doub
 The CA is owned by mitmproxy. `doubleagent` exports the generated CA certificate to `ca.cert_path` so the agent container can trust it, but it does not generate leaf certificates or manage a separate CA key anymore.
 
 ## Config reference
+
+If you want editor autocomplete and validation for a root-level `config.json`, add this as the first property in the file:
+
+```json
+{
+  "$schema": "./config/config.schema.json",
+  "...": "rest of your config"
+}
+```
 
 **Secret injection** supports three locations:
 

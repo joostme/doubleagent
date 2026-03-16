@@ -1,4 +1,5 @@
 {
+  "$schema": "./config.schema.json",
   "log_level": "info",
   "ca": {
     "cert_path": "/certs/ca.crt"

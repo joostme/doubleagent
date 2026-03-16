@@ -2,12 +2,38 @@ from __future__ import annotations
 
 import logging
 import subprocess
+from pathlib import Path
 
 
 OUTPUT_CHAIN_V4 = "DOUBLEAGENT_OUTPUT"
 PREROUTING_CHAIN_V4 = "DOUBLEAGENT_PREROUTING"
 OUTPUT_CHAIN_V6 = "DOUBLEAGENT_OUTPUT_V6"
 PREROUTING_CHAIN_V6 = "DOUBLEAGENT_PREROUTING_V6"
+
+
+def _parse_cgroup_v2_path(contents: str) -> str | None:
+    for line in contents.splitlines():
+        hierarchy, separator, remainder = line.partition(":")
+        if separator != ":":
+            continue
+        controllers, separator, path = remainder.partition(":")
+        if separator != ":":
+            continue
+        if hierarchy == "0" and controllers == "":
+            return path or "/"
+    return None
+
+
+def get_process_cgroup_path(proc_cgroup_path: str | Path = "/proc/self/cgroup") -> str:
+    contents = Path(proc_cgroup_path).read_text(encoding="utf-8")
+    cgroup_path = _parse_cgroup_v2_path(contents)
+    if cgroup_path is None:
+        raise RuntimeError(
+            "unable to determine proxy cgroup path from cgroup v2; refusing to install insecure UID-based bypass"
+        )
+    if cgroup_path == "/":
+        raise RuntimeError("proxy process is running in the root cgroup; refusing to bypass all traffic")
+    return cgroup_path
 
 
 def _run(binary: str, args: list[str], logger: logging.Logger) -> None:
@@ -65,7 +91,7 @@ def _setup_family(
     output_chain: str,
     prerouting_chain: str,
     intercept_port: int,
-    proxy_uid: int,
+    proxy_cgroup_path: str,
     logger: logging.Logger,
 ) -> None:
     _create_chain(binary, output_chain, logger)
@@ -74,7 +100,7 @@ def _setup_family(
     _flush_chain(binary, prerouting_chain, logger)
 
     output_rules = [
-        ["-t", "nat", "-A", output_chain, "-m", "owner", "--uid-owner", str(proxy_uid), "-j", "RETURN"],
+        ["-t", "nat", "-A", output_chain, "-m", "cgroup", "--path", proxy_cgroup_path, "-j", "RETURN"],
         ["-t", "nat", "-A", output_chain, "-o", "lo", "-j", "RETURN"],
         ["-t", "nat", "-A", output_chain, "-p", "tcp", "--dport", "80", "-j", "REDIRECT", "--to-ports", str(intercept_port)],
         ["-t", "nat", "-A", output_chain, "-p", "tcp", "--dport", "443", "-j", "REDIRECT", "--to-ports", str(intercept_port)],
@@ -94,15 +120,15 @@ def _setup_family(
     _ensure_jump(binary, "PREROUTING", prerouting_chain, logger)
 
 
-def setup(intercept_port: int, proxy_uid: int, logger: logging.Logger) -> None:
+def setup(intercept_port: int, proxy_cgroup_path: str, logger: logging.Logger) -> None:
     logger.info(
         "setting up iptables rules",
-        extra={"intercept_port": intercept_port, "proxy_uid": proxy_uid},
+        extra={"intercept_port": intercept_port, "proxy_cgroup_path": proxy_cgroup_path},
     )
     cleanup(logger, log_missing=False)
-    _setup_family("iptables", OUTPUT_CHAIN_V4, PREROUTING_CHAIN_V4, intercept_port, proxy_uid, logger)
+    _setup_family("iptables", OUTPUT_CHAIN_V4, PREROUTING_CHAIN_V4, intercept_port, proxy_cgroup_path, logger)
     try:
-        _setup_family("ip6tables", OUTPUT_CHAIN_V6, PREROUTING_CHAIN_V6, intercept_port, proxy_uid, logger)
+        _setup_family("ip6tables", OUTPUT_CHAIN_V6, PREROUTING_CHAIN_V6, intercept_port, proxy_cgroup_path, logger)
     except RuntimeError as exc:
         logger.warning("failed to set up ip6tables rules: %s", exc)
     logger.info("iptables rules installed successfully")
