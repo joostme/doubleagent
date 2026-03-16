@@ -15,10 +15,11 @@ from doubleagent.health import HealthServer
 from doubleagent.iptables import cleanup as cleanup_iptables
 from doubleagent.iptables import get_process_cgroup_path
 from doubleagent.iptables import setup as setup_iptables
+from doubleagent.logging_utils import resolve_log_level
 
 
 def create_logger(level: str) -> logging.Logger:
-    numeric_level = getattr(logging, level.upper(), logging.INFO)
+    numeric_level = resolve_log_level(level)
     logging.basicConfig(
         level=numeric_level,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",

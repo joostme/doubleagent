@@ -6,6 +6,38 @@ from collections.abc import MutableMapping
 from doubleagent.config import BlockResponse, LoadedConfig, ResolvedSecret, match_domain, match_path
 
 
+def _matches_allow_rule(method: str, path: str, allow_rules: bool | list) -> bool:
+    if allow_rules is True:
+        return True
+    if allow_rules is False:
+        return False
+
+    for allow in allow_rules:
+        method_match = not allow.method or allow.method.upper() == method.upper()
+        path_match = not allow.path_pattern or match_path(path, allow.path_pattern)
+        if method_match and path_match:
+            return True
+    return False
+
+
+def _matches_block_rule(method: str, path: str, block_rules: bool | list) -> BlockResponse | None:
+    if block_rules is True:
+        return BlockResponse(
+            status=403,
+            body={"error": "blocked", "reason": "domain is blocked by doubleagent policy"},
+        )
+    if block_rules is False:
+        return None
+
+    matched_block: BlockResponse | None = None
+    for block in block_rules:
+        method_match = not block.method or block.method.upper() == method.upper()
+        path_match = match_path(path, block.path_pattern)
+        if method_match and path_match:
+            matched_block = block.response
+    return matched_block
+
+
 def check_block(
     loaded: LoadedConfig,
     hostname: str,
@@ -20,17 +52,12 @@ def check_block(
             continue
         matched_domain = True
 
-        for allow in rule.allow:
-            method_match = not allow.method or allow.method.upper() == method.upper()
-            path_match = not allow.path_pattern or match_path(path, allow.path_pattern)
-            if method_match and path_match:
-                return None
+        if _matches_allow_rule(method, path, rule.allow):
+            return None
 
-        for block in rule.block:
-            method_match = not block.method or block.method.upper() == method.upper()
-            path_match = match_path(path, block.path_pattern)
-            if method_match and path_match:
-                matched_block = block.response
+        block = _matches_block_rule(method, path, rule.block)
+        if block is not None:
+            matched_block = block
 
     if matched_block:
         return matched_block

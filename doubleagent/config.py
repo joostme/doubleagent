@@ -7,7 +7,7 @@ from pathlib import Path
 from threading import RLock
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 
 def _is_valid_inject_location(value: str) -> bool:
@@ -66,8 +66,14 @@ class Rule(BaseModel):
 
     domains: list[str] = Field(min_length=1)
     secrets: list[SecretRule] = Field(default_factory=list)
-    block: list[BlockRule] = Field(default_factory=list)
-    allow: list[AllowRule] = Field(default_factory=list)
+    block: bool | list[BlockRule] = Field(default_factory=list)
+    allow: bool | list[AllowRule] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_allow_block(self) -> Rule:
+        if self.allow is True and self.block is True:
+            raise ValueError("rule cannot set both allow and block to true")
+        return self
 
 
 class CAConfig(BaseModel):
@@ -92,8 +98,8 @@ class Config(BaseModel):
     @field_validator("log_level")
     @classmethod
     def validate_log_level(cls, value: str) -> str:
-        if value not in {"debug", "info", "warn", "error"}:
-            raise ValueError("log_level must be one of debug, info, warn, error")
+        if value not in {"debug", "info", "warning", "error"}:
+            raise ValueError("log_level must be one of debug, info, warning, error")
         return value
 
     @field_validator("default_policy")

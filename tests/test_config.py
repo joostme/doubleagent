@@ -5,7 +5,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from doubleagent.config import load_config, match_domain, match_path, resolve_secrets
+from pydantic import ValidationError
+
+from doubleagent.config import Config, load_config, match_domain, match_path, resolve_secrets
+from doubleagent.logging_utils import resolve_log_level
 
 
 class ConfigTests(unittest.TestCase):
@@ -41,6 +44,29 @@ class ConfigTests(unittest.TestCase):
         config = load_config(path)
         resolved = resolve_secrets(config)
         self.assertEqual(resolved[0][0].resolved_value, "secret-value")
+
+    def test_resolve_log_level_accepts_warning(self) -> None:
+        self.assertEqual(resolve_log_level("warning"), 30)
+        self.assertEqual(resolve_log_level("debug"), 10)
+
+    def test_load_config_accepts_warning_log_level(self) -> None:
+        path = self._write_config('{"log_level": "warning", "rules": []}')
+        config = load_config(path)
+        self.assertEqual(config.log_level, "warning")
+
+    def test_load_config_accepts_boolean_allow_and_block_rules(self) -> None:
+        path = self._write_config(
+            '{"rules": [{"domains": ["allow.example.com"], "allow": true}, {"domains": ["block.example.com"], "block": true}]}'
+        )
+        config = load_config(path)
+        self.assertTrue(config.rules[0].allow)
+        self.assertTrue(config.rules[1].block)
+
+    def test_rule_rejects_both_allow_and_block_true(self) -> None:
+        with self.assertRaises(ValidationError):
+            Config.model_validate(
+                {"rules": [{"domains": ["example.com"], "allow": True, "block": True}]}
+            )
 
 
 if __name__ == "__main__":

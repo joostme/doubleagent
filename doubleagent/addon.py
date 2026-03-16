@@ -7,6 +7,7 @@ import os
 from mitmproxy import http
 
 from doubleagent.config import ConfigStore
+from doubleagent.logging_utils import set_logger_level
 from doubleagent.policy import check_block, inject_request_secrets
 
 
@@ -17,9 +18,11 @@ CONFIG_PATH = os.environ.get("DOUBLEAGENT_CONFIG", "/config/config.json")
 class DoubleAgentAddon:
     def __init__(self) -> None:
         self.store = ConfigStore(CONFIG_PATH, LOGGER)
+        set_logger_level(LOGGER, self.store.get().config.log_level)
 
     def request(self, flow: http.HTTPFlow) -> None:
         loaded = self.store.get()
+        set_logger_level(LOGGER, loaded.config.log_level)
         host = flow.request.pretty_host or flow.request.host or ""
         path = flow.request.path.split("?", 1)[0]
         method = flow.request.method

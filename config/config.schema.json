@@ -4,9 +4,13 @@
   "type": "object",
   "additionalProperties": false,
   "properties": {
+    "$schema": {
+      "type": "string",
+      "title": "Schema"
+    },
     "log_level": {
       "type": "string",
-      "enum": ["debug", "info", "warn", "error"],
+      "enum": ["debug", "info", "warning", "error"],
       "default": "info",
       "title": "Log Level"
     },
@@ -164,18 +168,32 @@
           }
         },
         "block": {
-          "type": "array",
-          "title": "Block",
-          "items": {
-            "$ref": "#/$defs/BlockRule"
-          }
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/BlockRule"
+              }
+            }
+          ],
+          "title": "Block"
         },
         "allow": {
-          "type": "array",
-          "title": "Allow",
-          "items": {
-            "$ref": "#/$defs/AllowRule"
-          }
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/AllowRule"
+              }
+            }
+          ],
+          "title": "Allow"
         }
       },
       "required": ["domains"]
