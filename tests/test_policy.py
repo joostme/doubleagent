@@ -48,7 +48,7 @@ class PolicyTests(unittest.TestCase):
                     {"domains": ["blocked.example.com"], "block": True},
                     {"domains": ["allowed.example.com"], "allow": True},
                 ],
-                "default_policy": "deny",
+                "default_policy": "block",
             }
         )
         self.bool_loaded = LoadedConfig(config=bool_config, resolved_secrets=resolve_secrets(bool_config))
@@ -89,11 +89,11 @@ class PolicyTests(unittest.TestCase):
         self.assertEqual(blocked.status, 403)
         self.assertEqual(blocked.body["reason"], "domain is blocked by doubleagent policy")
 
-    def test_allow_true_allows_domain_under_default_deny(self) -> None:
+    def test_allow_true_allows_domain_under_default_block(self) -> None:
         allowed = check_block(self.bool_loaded, "allowed.example.com", "PATCH", "/anything")
         self.assertIsNone(allowed)
 
-    def test_default_deny_still_blocks_unmatched_domain(self) -> None:
+    def test_default_block_still_blocks_unmatched_domain(self) -> None:
         blocked = check_block(self.bool_loaded, "other.example.com", "GET", "/anything")
         self.assertIsNotNone(blocked)
 

@@ -153,6 +153,6 @@ Secrets can be set as a static `value` or loaded from environment variables with
 
 **Block rules** match by HTTP method and glob path pattern (`*` for single segment, `**` for multiple). Allow rules take priority over blocks.
 
-**Default policy** is `allow` (forward unmatched traffic) or `deny` (block everything without an explicit rule).
+**Default policy** is `allow` (forward unmatched traffic) or `block` (block everything without an explicit rule).
 
 **Plain HTTP injection** is disabled by default. Set `allow_http_secret_injection: true` only for trusted plaintext upstreams such as localhost-only services.

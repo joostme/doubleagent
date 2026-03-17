@@ -62,11 +62,11 @@ def check_block(
     if matched_block:
         return matched_block
 
-    if loaded.config.default_policy == "deny":
+    if loaded.config.default_policy == "block":
         reason = (
-            "request is not explicitly allowed and default policy is deny"
+            "request is not explicitly allowed and default policy is block"
             if matched_domain
-            else "no matching rule and default policy is deny"
+            else "no matching rule and default policy is block"
         )
         return BlockResponse(status=403, body={"error": "blocked", "reason": reason})
 

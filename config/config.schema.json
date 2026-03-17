@@ -10,7 +10,12 @@
     },
     "log_level": {
       "type": "string",
-      "enum": ["debug", "info", "warning", "error"],
+      "enum": [
+        "debug",
+        "info",
+        "warning",
+        "error"
+      ],
       "default": "info",
       "title": "Log Level"
     },
@@ -26,7 +31,10 @@
     },
     "default_policy": {
       "type": "string",
-      "enum": ["allow", "deny"],
+      "enum": [
+        "allow",
+        "block"
+      ],
       "default": "allow",
       "title": "Default Policy"
     },
@@ -95,7 +103,10 @@
           "title": "Body"
         }
       },
-      "required": ["status", "body"]
+      "required": [
+        "status",
+        "body"
+      ]
     },
     "BlockRule": {
       "title": "BlockRule",
@@ -123,7 +134,10 @@
           "$ref": "#/$defs/BlockResponse"
         }
       },
-      "required": ["path_pattern", "response"]
+      "required": [
+        "path_pattern",
+        "response"
+      ]
     },
     "CAConfig": {
       "title": "CAConfig",
@@ -186,7 +200,9 @@
           "title": "Allow"
         }
       },
-      "required": ["domains"]
+      "required": [
+        "domains"
+      ]
     },
     "SecretRule": {
       "title": "SecretRule",
@@ -237,7 +253,10 @@
           "title": "Prefix"
         }
       },
-      "required": ["placeholder", "inject_in"]
+      "required": [
+        "placeholder",
+        "inject_in"
+      ]
     }
   }
 }

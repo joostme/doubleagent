@@ -107,8 +107,8 @@ class Config(BaseModel):
     @field_validator("default_policy")
     @classmethod
     def validate_default_policy(cls, value: str) -> str:
-        if value not in {"allow", "deny"}:
-            raise ValueError("default_policy must be allow or deny")
+        if value not in {"allow", "block"}:
+            raise ValueError("default_policy must be allow or block")
         return value
 
 
