@@ -28,13 +28,15 @@ class ConfigTests(unittest.TestCase):
 
     def test_match_domain(self) -> None:
         self.assertTrue(match_domain("api.openai.com", ["api.openai.com"]))
+        self.assertTrue(match_domain("deep.sub.example.com", [".example.com"]))
+        self.assertFalse(match_domain("example.com", [".example.com"]))
         self.assertTrue(match_domain("deep.sub.example.com", ["*.example.com"]))
-        self.assertFalse(match_domain("example.com", ["*.example.com"]))
 
     def test_match_path(self) -> None:
         self.assertTrue(match_path("/v1/files/abc", "/v1/files/*"))
         self.assertFalse(match_path("/v1/files/abc/def", "/v1/files/*"))
         self.assertTrue(match_path("/v1/files/abc/def", "/v1/files/**"))
+        self.assertTrue(match_path("/v1/files/report.json", "/v1/files/*.json"))
 
     def test_resolve_secrets_from_env(self) -> None:
         os.environ["TEST_KEY"] = "secret-value"

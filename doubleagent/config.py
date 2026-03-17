@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import glob
 import logging
 import os
+import re
 from dataclasses import dataclass
+from functools import lru_cache
+from http.cookiejar import DefaultCookiePolicy
 from pathlib import Path
 from threading import RLock
 from typing import Any
@@ -165,45 +169,36 @@ def _strip_host_port(hostname: str) -> str:
     return hostname.lower()
 
 
+def _normalize_domain_pattern(pattern: str) -> str:
+    current = _strip_host_port(pattern)
+    if current.startswith("*."):
+        return f".{current[2:]}"
+    return current
+
+
+@lru_cache(maxsize=256)
+def _domain_policy(pattern: str) -> DefaultCookiePolicy:
+    return DefaultCookiePolicy(blocked_domains=(pattern,))
+
+
 def match_domain(hostname: str, patterns: list[str]) -> bool:
     host = _strip_host_port(hostname)
     for pattern in patterns:
-        current = _strip_host_port(pattern)
-        if current == host:
+        current = _normalize_domain_pattern(pattern)
+        if not current:
+            continue
+        if _domain_policy(current).is_blocked(host):
             return True
-        if current.startswith("*."):
-            suffix = current[1:]
-            if host.endswith(suffix) and host.count(".") >= suffix.count("."):
-                return True
     return False
 
 
+@lru_cache(maxsize=256)
+def _compile_path_pattern(pattern: str) -> re.Pattern[str]:
+    return re.compile(glob.translate(pattern, recursive=True, include_hidden=True, seps="/"))
+
+
 def match_path(path: str, pattern: str) -> bool:
-    path_parts = [part for part in path.strip("/").split("/") if part]
-    pattern_parts = [part for part in pattern.strip("/").split("/") if part]
-
-    def _match(path_index: int, pattern_index: int) -> bool:
-        if pattern_index == len(pattern_parts):
-            return path_index == len(path_parts)
-
-        token = pattern_parts[pattern_index]
-        if token == "**":
-            if pattern_index == len(pattern_parts) - 1:
-                return True
-            for next_path_index in range(path_index, len(path_parts) + 1):
-                if _match(next_path_index, pattern_index + 1):
-                    return True
-            return False
-
-        if path_index >= len(path_parts):
-            return False
-
-        if token == "*" or token == path_parts[path_index]:
-            return _match(path_index + 1, pattern_index + 1)
-
-        return False
-
-    return _match(0, 0)
+    return bool(_compile_path_pattern(pattern).fullmatch(path))
 
 
 class ConfigStore:
