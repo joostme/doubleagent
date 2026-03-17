@@ -60,8 +60,10 @@ services:
       #   - Debian/Ubuntu: /usr/local/share/ca-certificates/
       #   - Alpine: /usr/local/share/ca-certificates/
       #   - RHEL/Fedora: /etc/pki/ca-trust/source/anchors/
-      # You must also run update-ca-certificates in the container's entrypoint.
       - certs:/usr/local/share/ca-certificates/doubleagent:ro
+      # Mount the helper script into the AI container so it can install the CA
+      # into its own trust store at startup.
+      - ./scripts/install-ca.sh:/scripts/install-ca.sh:ro
     environment:
       # Placeholder keys - these are replaced by doubleagent with real keys
       - OPENAI_API_KEY=PLACEHOLDER_OPENAI_KEY
@@ -79,14 +81,16 @@ services:
       - SSL_CERT_DIR=/usr/local/share/ca-certificates/doubleagent
       # Java: requires keytool import into the JVM truststore — see below
 
-    # Install the CA cert into the system trust store at startup.
+    # Install the CA cert into the AI container's system trust store at startup.
+    # Replace "/entrypoint.sh" with the AI image's real startup command.
     # This covers Go, curl, wget, Python (certifi), and most other tools.
+    entrypoint: >
+      sh -c "sh /scripts/install-ca.sh && exec /entrypoint.sh"
+
     # For Java, add: keytool -importcert -noprompt -keystore $JAVA_HOME/lib/security/cacerts \
     #   -storepass changeit -alias doubleagent -file /usr/local/share/ca-certificates/doubleagent/ca.crt
     #
-    # Replace "your-original-command" with the AI agent's actual entrypoint.
-    # command: >
-    #   sh -c "update-ca-certificates 2>/dev/null; exec your-original-command"
+    # If your image does not have /bin/sh, bake the cert install step into the AI image instead.
 
 volumes:
   certs:

@@ -82,14 +82,17 @@ services:
         condition: service_healthy
     volumes:
       - certs:/usr/local/share/ca-certificates/doubleagent:ro
+      - ./scripts/install-ca.sh:/scripts/install-ca.sh:ro
     environment:
       - OPENAI_API_KEY=PLACEHOLDER_OPENAI_KEY
       - NODE_EXTRA_CA_CERTS=/usr/local/share/ca-certificates/doubleagent/ca.crt
-    command: sh -c "update-ca-certificates 2>/dev/null; exec your-command"
+    entrypoint: sh -c "sh /scripts/install-ca.sh && exec your-command"
 
 volumes:
   certs:
 ```
+
+Replace `your-command` with the AI image's real startup command. The CA must be installed in the `ai-agent` container, not the `doubleagent` sidecar, because the agent is the TLS client talking through the MITM proxy.
 
 **3. Run it**
 
