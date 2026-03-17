@@ -15,6 +15,7 @@ from doubleagent.health import HealthServer
 from doubleagent.iptables import add_pid_to_cgroup
 from doubleagent.iptables import build_proxy_cgroup_path
 from doubleagent.iptables import cleanup as cleanup_iptables
+from doubleagent.iptables import ensure_cgroup
 from doubleagent.iptables import get_process_cgroup_path
 from doubleagent.iptables import remove_cgroup
 from doubleagent.iptables import setup as setup_iptables
@@ -107,7 +108,15 @@ def main() -> int:
         parent_cgroup_path = get_process_cgroup_path()
         proxy_cgroup_path = build_proxy_cgroup_path(parent_cgroup_path)
         logger.info("using proxy cgroup path for bypass matching: %s", proxy_cgroup_path)
-        setup_iptables(config.http_port, proxy_cgroup_path, logger)
+        try:
+            ensure_cgroup(proxy_cgroup_path)
+            setup_iptables(config.http_port, proxy_cgroup_path, logger)
+        except Exception:
+            try:
+                remove_cgroup(proxy_cgroup_path)
+            except OSError:
+                pass
+            raise
     else:
         logger.warning("skipping iptables setup (test mode)")
 
