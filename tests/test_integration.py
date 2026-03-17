@@ -90,8 +90,7 @@ class MitmproxyIntegrationTests(unittest.TestCase):
                         {{
                           "placeholder": "PLACEHOLDER_KEY",
                           "value": "real-secret-value",
-                          "inject_in": ["header:Authorization", "query:api_key"],
-                          "prefix": "Bearer "
+                          "inject_in": ["header:Authorization", "query:api_key"]
                         }}
                       ],
                       "block": [
@@ -112,8 +111,7 @@ class MitmproxyIntegrationTests(unittest.TestCase):
                       ]
                     }}
                   ],
-                  "default_policy": "allow",
-                  "allow_http_secret_injection": true
+                  "default_policy": "allow"
                 }}
                 """
             ).strip(),
@@ -191,11 +189,11 @@ class MitmproxyIntegrationTests(unittest.TestCase):
             "POST",
             "/v1/test?api_key=PLACEHOLDER_KEY",
             body=b'{"key":"PLACEHOLDER_KEY"}',
-            headers={"Authorization": "PLACEHOLDER_KEY", "Content-Type": "application/json"},
+            headers={"Authorization": "Bearer PLACEHOLDER_KEY", "Content-Type": "application/json"},
         )
         payload = json.loads(response.read().decode("utf-8"))
         self.assertEqual(payload["headers"]["Authorization"], "Bearer real-secret-value")
-        self.assertIn("api_key=Bearer+real-secret-value", payload["path"])
+        self.assertIn("api_key=real-secret-value", payload["path"])
 
 
 if __name__ == "__main__":

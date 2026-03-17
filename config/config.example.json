@@ -5,7 +5,6 @@
     "cert_path": "/certs/ca.crt"
   },
   "http_port": 8080,
-  "allow_http_secret_injection": false,
   "rules": [
     {
       "domains": ["api.openai.com"],
@@ -13,8 +12,7 @@
         {
           "placeholder": "PLACEHOLDER_OPENAI_KEY",
           "value_from_env": "OPENAI_API_KEY",
-          "inject_in": ["header:Authorization"],
-          "prefix": "Bearer "
+          "inject_in": ["header:Authorization"]
         }
       ],
       "block": [
@@ -63,8 +61,7 @@
         {
           "placeholder": "PLACEHOLDER_GITHUB_TOKEN",
           "value_from_env": "GITHUB_TOKEN",
-          "inject_in": ["header:Authorization"],
-          "prefix": "Bearer "
+          "inject_in": ["header:Authorization"]
         }
       ],
       "block": [

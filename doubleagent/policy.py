@@ -104,21 +104,13 @@ def inject_request_secrets(
     if not secrets:
         return
 
-    if scheme.lower() != "https" and not loaded.config.allow_http_secret_injection:
-        logger.warning(
-            "refusing to inject secrets into plaintext HTTP request for host %s",
-            hostname,
-        )
-        return
-
     for secret in secrets:
-        full_value = f"{secret.prefix}{secret.resolved_value}"
         for location in secret.inject_in:
             if location.startswith("header:"):
                 header_name = location[len("header:") :]
                 actual_key, current_value = _get_header(headers, header_name)
                 if actual_key and current_value and secret.placeholder in current_value:
-                    headers[actual_key] = current_value.replace(secret.placeholder, full_value)
+                    headers[actual_key] = current_value.replace(secret.placeholder, secret.resolved_value)
             elif location.startswith("query:"):
                 query_name = location[len("query:") :]
                 current_value = query.get(query_name)
@@ -126,5 +118,5 @@ def inject_request_secrets(
                     _set_query_value(
                         query,
                         query_name,
-                        current_value.replace(secret.placeholder, full_value),
+                        current_value.replace(secret.placeholder, secret.resolved_value),
                     )

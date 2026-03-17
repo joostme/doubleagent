@@ -1,44 +1,19 @@
-# doubleagent - AI Safety Sidecar Proxy
+# doubleagent - AI safety proxy sidecar
 #
-# This example demonstrates how to use doubleagent as a transparent intercepting
-# proxy sidecar for an AI agent container.
-#
-# Architecture:
-#   - doubleagent owns the network namespace (CAP_NET_ADMIN)
-#   - ai-agent shares doubleagent's network via network_mode: "service:doubleagent"
-#   - All outgoing HTTP/HTTPS traffic from ai-agent is intercepted by doubleagent
-#   - doubleagent runs mitmproxy in transparent mode under the hood
-#   - doubleagent injects real API keys (replacing placeholders) and blocks forbidden calls
-#   - The AI agent never sees the real API keys
-#
-# Usage:
-#   1. Copy config/config.example.json to config.json and edit it
-#   2. Set your real API keys as environment variables (or in .env file)
-#   3. Run: docker compose up
-#
-# The AI container should:
-#   - Use network_mode: "service:doubleagent" to route all traffic through the sidecar
-#   - Mount the shared certs volume and install the CA cert in its trust store
-#   - Only use placeholder API keys in its environment
+# This example uses explicit proxy mode.
+# The AI container talks to `http://doubleagent:8080` via HTTP_PROXY / HTTPS_PROXY.
+# doubleagent swaps placeholder secrets for real ones and blocks forbidden calls.
 
 services:
-  # ---- doubleagent sidecar (owns the network) ----
   doubleagent:
     build: .
-    cap_add:
-      - NET_ADMIN  # Required for iptables rules
     volumes:
-      - certs:/certs                         # CA cert shared with AI container
-      - ./config.json:/config/config.json:ro # Proxy configuration
+      - certs:/certs
+      - ./config.json:/config/config.json:ro
     environment:
-      # Real API keys - only the sidecar knows these
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - GITHUB_TOKEN=${GITHUB_TOKEN}
-    # Expose any ports that the AI agent needs to be reachable on
-    # (since ai-agent shares this network namespace)
-    # ports:
-    #   - "3000:3000"  # Example: AI agent web UI
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:9000/healthz"]
       interval: 5s
@@ -47,50 +22,25 @@ services:
       retries: 3
     restart: unless-stopped
 
-  # ---- AI agent container (uses doubleagent's network) ----
   ai-agent:
-    image: my-ai-agent:latest  # Replace with your AI agent image
-    network_mode: "service:doubleagent"
+    image: my-ai-agent:latest
     depends_on:
       doubleagent:
         condition: service_healthy
     volumes:
-      # Mount the CA cert so the AI container trusts our MITM proxy.
-      # The exact path depends on the base image:
-      #   - Debian/Ubuntu: /usr/local/share/ca-certificates/
-      #   - Alpine: /usr/local/share/ca-certificates/
-      #   - RHEL/Fedora: /etc/pki/ca-trust/source/anchors/
-      - certs:/usr/local/share/ca-certificates/doubleagent:ro
-      # Mount the helper script into the AI container so it can install the CA
-      # into its own trust store at startup.
-      - ./scripts/install-ca.sh:/scripts/install-ca.sh:ro
+      - certs:/certs:ro
     environment:
-      # Placeholder keys - these are replaced by doubleagent with real keys
       - OPENAI_API_KEY=PLACEHOLDER_OPENAI_KEY
       - ANTHROPIC_API_KEY=PLACEHOLDER_ANTHROPIC_KEY
       - GITHUB_TOKEN=PLACEHOLDER_GITHUB_TOKEN
-
-      # --- CA trust for runtimes that don't use the system store ---
-      # Node.js: does NOT use system CAs by default
-      - NODE_EXTRA_CA_CERTS=/usr/local/share/ca-certificates/doubleagent/ca.crt
-      # Python (requests/httpx/urllib3): usually uses system CAs via certifi,
-      # but set this to be safe, especially in virtualenvs
-      - REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
-      - SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
-      # Ruby (net/http)
-      - SSL_CERT_DIR=/usr/local/share/ca-certificates/doubleagent
-      # Java: requires keytool import into the JVM truststore — see below
-
-    # Install the CA cert into the AI container's system trust store at startup.
-    # Replace "/entrypoint.sh" with the AI image's real startup command.
-    # This covers Go, curl, wget, Python (certifi), and most other tools.
-    entrypoint: >
-      sh -c "sh /scripts/install-ca.sh && exec /entrypoint.sh"
-
-    # For Java, add: keytool -importcert -noprompt -keystore $JAVA_HOME/lib/security/cacerts \
-    #   -storepass changeit -alias doubleagent -file /usr/local/share/ca-certificates/doubleagent/ca.crt
-    #
-    # If your image does not have /bin/sh, bake the cert install step into the AI image instead.
+      - HTTP_PROXY=http://doubleagent:8080
+      - HTTPS_PROXY=http://doubleagent:8080
+      - NO_PROXY=localhost,127.0.0.1
+      - NODE_EXTRA_CA_CERTS=/certs/ca.crt
+      - REQUESTS_CA_BUNDLE=/certs/ca.crt
+      - SSL_CERT_FILE=/certs/ca.crt
+      - CURL_CA_BUNDLE=/certs/ca.crt
+      - GIT_SSL_CAINFO=/certs/ca.crt
 
 volumes:
   certs:

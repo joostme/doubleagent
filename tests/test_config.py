@@ -24,7 +24,6 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(config.log_level, "info")
         self.assertEqual(config.default_policy, "allow")
         self.assertEqual(config.http_port, 8080)
-        self.assertFalse(config.allow_http_secret_injection)
 
     def test_match_domain(self) -> None:
         self.assertTrue(match_domain("api.openai.com", ["api.openai.com"]))

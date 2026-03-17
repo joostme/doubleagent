@@ -1,10 +1,8 @@
 FROM python:3.12-slim
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends iptables iproute2 ca-certificates wget \
+  && apt-get install -y --no-install-recommends ca-certificates wget \
   && rm -rf /var/lib/apt/lists/*
-
-RUN useradd --create-home --uid 1000 doubleagent
 
 WORKDIR /app
 COPY requirements.txt ./
@@ -17,7 +15,7 @@ COPY config/ config/
 COPY README.md README.md
 RUN chmod +x /entrypoint.sh /scripts/install-ca.sh
 
-RUN mkdir -p /certs /config && chown doubleagent:doubleagent /certs
+RUN mkdir -p /certs /config
 
 EXPOSE 8080 9000
 

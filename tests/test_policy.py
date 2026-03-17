@@ -20,7 +20,6 @@ class PolicyTests(unittest.TestCase):
                                 "placeholder": "PLACEHOLDER_KEY",
                                 "value": "real-secret",
                                 "inject_in": ["header:authorization", "query:api_key"],
-                                "prefix": "Bearer ",
                             }
                         ],
                         "block": [
@@ -37,7 +36,6 @@ class PolicyTests(unittest.TestCase):
                     }
                 ],
                 "default_policy": "allow",
-                "allow_http_secret_injection": True,
             }
         )
         self.loaded = LoadedConfig(config=config, resolved_secrets=resolve_secrets(config))
@@ -64,7 +62,7 @@ class PolicyTests(unittest.TestCase):
         self.assertIsNone(allowed)
 
     def test_secret_injection(self) -> None:
-        headers = {"authorization": "PLACEHOLDER_KEY"}
+        headers = {"authorization": "Bearer PLACEHOLDER_KEY"}
         query = {"api_key": "PLACEHOLDER_KEY"}
         inject_request_secrets(
             self.loaded,
@@ -75,7 +73,7 @@ class PolicyTests(unittest.TestCase):
             self.logger,
         )
         self.assertEqual(headers["authorization"], "Bearer real-secret")
-        self.assertEqual(query["api_key"], "Bearer real-secret")
+        self.assertEqual(query["api_key"], "real-secret")
 
     def test_block_true_blocks_domain_for_all_requests(self) -> None:
         blocked = check_block(self.bool_loaded, "blocked.example.com", "GET", "/anything")

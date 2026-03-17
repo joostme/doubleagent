@@ -36,7 +36,6 @@ class SecretRule(BaseModel):
     value: str | None = None
     value_from_env: str | None = None
     inject_in: list[str] = Field(min_length=1)
-    prefix: str = ""
 
     @field_validator("inject_in")
     @classmethod
@@ -91,7 +90,6 @@ class Config(BaseModel):
     default_policy: str = "allow"
     http_port: int = 8080
     health_port: int = 9000
-    allow_http_secret_injection: bool = False
 
     @field_validator("log_level")
     @classmethod
@@ -113,7 +111,6 @@ class ResolvedSecret:
     placeholder: str
     resolved_value: str
     inject_in: tuple[str, ...]
-    prefix: str
 
 
 @dataclass(frozen=True)
@@ -144,7 +141,6 @@ def resolve_secrets(config: Config) -> dict[int, list[ResolvedSecret]]:
                     placeholder=secret.placeholder,
                     resolved_value=value,
                     inject_in=tuple(secret.inject_in),
-                    prefix=secret.prefix,
                 )
             )
         if secrets:

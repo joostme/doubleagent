@@ -10,43 +10,27 @@ from doubleagent import main
 class MainTests(unittest.TestCase):
     @patch("doubleagent.main.signal.signal")
     @patch("doubleagent.main.export_generated_ca")
-    @patch("doubleagent.main.add_pid_to_cgroup")
     @patch("doubleagent.main.subprocess.Popen")
     @patch("doubleagent.main.build_mitmdump_command", return_value=["mitmdump"])
-    @patch("doubleagent.main.remove_cgroup")
-    @patch("doubleagent.main.cleanup_iptables")
-    @patch("doubleagent.main.setup_iptables")
-    @patch("doubleagent.main.ensure_cgroup")
-    @patch("doubleagent.main.build_proxy_cgroup_path", return_value="/doubleagent-proxy")
-    @patch("doubleagent.main.get_process_cgroup_path", return_value="/")
     @patch("doubleagent.main.HealthServer")
     @patch("doubleagent.main.prepare_confdir")
     @patch("doubleagent.main.resolve_secrets")
     @patch("doubleagent.main.load_config")
     @patch("doubleagent.main.parse_args")
-    def test_main_reports_actionable_cgroup_error(
+    def test_main_starts_explicit_proxy(
         self,
         mock_parse_args: Mock,
         mock_load_config: Mock,
         mock_resolve_secrets: Mock,
         mock_prepare_confdir: Mock,
         mock_health_server: Mock,
-        mock_get_process_cgroup_path: Mock,
-        mock_build_proxy_cgroup_path: Mock,
-        mock_ensure_cgroup: Mock,
-        mock_setup_iptables: Mock,
-        mock_cleanup_iptables: Mock,
-        mock_remove_cgroup: Mock,
         mock_build_mitmdump_command: Mock,
         mock_popen: Mock,
-        mock_add_pid_to_cgroup: Mock,
         mock_export_generated_ca: Mock,
         mock_signal: Mock,
     ) -> None:
         mock_parse_args.return_value = argparse.Namespace(
             config="/tmp/config.json",
-            skip_iptables=False,
-            cleanup_iptables=False,
         )
         mock_load_config.return_value = argparse.Namespace(
             log_level="info",
@@ -62,54 +46,36 @@ class MainTests(unittest.TestCase):
         mock_health_server.return_value = health_server
 
         child = Mock()
-        child.pid = 1234
+        child.wait.return_value = 0
         mock_popen.return_value = child
 
-        mock_add_pid_to_cgroup.side_effect = OSError("read-only file system")
+        self.assertEqual(main.main(), 0)
 
-        with self.assertRaisesRegex(RuntimeError, "cgroup v2 delegation"):
-            main.main()
-
-        child.terminate.assert_called_once()
-        child.wait.assert_called_once_with(timeout=5)
+        mock_resolve_secrets.assert_called_once()
+        mock_build_mitmdump_command.assert_called_once_with(8080, "/tmp/confdir")
+        mock_popen.assert_called_once_with(["mitmdump"], env=ANY)
+        mock_export_generated_ca.assert_called_once_with("/tmp/confdir", "/tmp/ca.crt", ANY)
+        child.wait.assert_called_once_with()
+        mock_health_server.return_value.start.assert_called_once()
         health_server.stop.assert_called_once()
-        mock_export_generated_ca.assert_not_called()
-        mock_signal.assert_not_called()
-        mock_build_proxy_cgroup_path.assert_called_once_with("/")
-        mock_ensure_cgroup.assert_called_once_with("/doubleagent-proxy")
-        mock_cleanup_iptables.assert_called_once()
-        self.assertGreaterEqual(mock_remove_cgroup.call_count, 1)
-        mock_remove_cgroup.assert_any_call("/doubleagent-proxy")
-        mock_setup_iptables.assert_called_once_with(8080, "/doubleagent-proxy", ANY)
+        self.assertEqual(mock_signal.call_count, 2)
 
     @patch("doubleagent.main.signal.signal")
     @patch("doubleagent.main.export_generated_ca")
     @patch("doubleagent.main.subprocess.Popen")
     @patch("doubleagent.main.build_mitmdump_command", return_value=["mitmdump"])
-    @patch("doubleagent.main.remove_cgroup")
-    @patch("doubleagent.main.cleanup_iptables")
-    @patch("doubleagent.main.setup_iptables")
-    @patch("doubleagent.main.ensure_cgroup")
-    @patch("doubleagent.main.build_proxy_cgroup_path", return_value="/doubleagent-proxy")
-    @patch("doubleagent.main.get_process_cgroup_path", return_value="/")
     @patch("doubleagent.main.HealthServer")
     @patch("doubleagent.main.prepare_confdir")
     @patch("doubleagent.main.resolve_secrets")
     @patch("doubleagent.main.load_config")
     @patch("doubleagent.main.parse_args")
-    def test_main_cleans_up_cgroup_when_iptables_setup_fails(
+    def test_main_stops_child_when_ca_export_fails(
         self,
         mock_parse_args: Mock,
         mock_load_config: Mock,
         mock_resolve_secrets: Mock,
         mock_prepare_confdir: Mock,
         mock_health_server: Mock,
-        mock_get_process_cgroup_path: Mock,
-        mock_build_proxy_cgroup_path: Mock,
-        mock_ensure_cgroup: Mock,
-        mock_setup_iptables: Mock,
-        mock_cleanup_iptables: Mock,
-        mock_remove_cgroup: Mock,
         mock_build_mitmdump_command: Mock,
         mock_popen: Mock,
         mock_export_generated_ca: Mock,
@@ -117,8 +83,6 @@ class MainTests(unittest.TestCase):
     ) -> None:
         mock_parse_args.return_value = argparse.Namespace(
             config="/tmp/config.json",
-            skip_iptables=False,
-            cleanup_iptables=False,
         )
         mock_load_config.return_value = argparse.Namespace(
             log_level="info",
@@ -129,19 +93,21 @@ class MainTests(unittest.TestCase):
             http_port=8080,
         )
         mock_prepare_confdir.return_value = "/tmp/confdir"
-        mock_health_server.return_value = Mock()
-        mock_setup_iptables.side_effect = RuntimeError("RULE_APPEND failed")
+        health_server = Mock()
+        mock_health_server.return_value = health_server
 
-        with self.assertRaisesRegex(RuntimeError, "RULE_APPEND failed"):
+        child = Mock()
+        mock_popen.return_value = child
+
+        mock_export_generated_ca.side_effect = TimeoutError("ca export failed")
+
+        with self.assertRaisesRegex(TimeoutError, "ca export failed"):
             main.main()
 
-        mock_ensure_cgroup.assert_called_once_with("/doubleagent-proxy")
-        mock_setup_iptables.assert_called_once_with(8080, "/doubleagent-proxy", ANY)
-        mock_remove_cgroup.assert_called_once_with("/doubleagent-proxy")
-        mock_popen.assert_not_called()
-        mock_export_generated_ca.assert_not_called()
+        child.terminate.assert_called_once()
+        child.wait.assert_called_once_with(timeout=5)
+        health_server.stop.assert_called_once()
         mock_signal.assert_not_called()
-        mock_cleanup_iptables.assert_not_called()
 
 
 if __name__ == "__main__":

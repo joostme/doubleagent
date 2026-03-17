@@ -1,31 +1,14 @@
 # doubleagent
 
-A transparent proxy sidecar that sits between your AI agent and the internet — injecting real API keys and blocking dangerous requests, without the agent ever knowing.
+An explicit proxy sidecar for AI containers. It swaps placeholder secrets for real ones and blocks unsafe requests before they leave the stack.
 
-```
-┌──────────────┐       ┌──────────────────┐       ┌──────────────┐
-│              │       │  doubleagent     │       │              │
-│   AI Agent   │──────>│                  │──────>│   Internet   │
-│              │       │  ✓ swap secrets  │       │              │
-│  (only sees  │       │  ✗ block DELETE  │       │  api.openai  │
-│  fake keys)  │       │  ✓ forward safe  │       │  github.com  │
-│              │       │    requests      │       │  etc.        │
-└──────────────┘       └──────────────────┘       └──────────────┘
-    network_mode:           iptables
-    service:doubleagent     REDIRECT
-```
+## What it does
 
-## Why
-
-AI agents need API keys to work. But giving an agent real credentials means it can leak them, exfiltrate them, or use them to do things you didn't intend — like deleting your GitHub repos.
-
-doubleagent solves this by acting as a **double agent**: it pretends to be a transparent network to the AI, while secretly working for you — swapping in real keys and enforcing your rules.
-
-- **Secret injection** — The AI only sees placeholder keys. doubleagent swaps them for real credentials in-flight, in headers or query params.
-- **Request blocking** — Block dangerous API calls by method and path pattern. `DELETE /repos/*/*`? Blocked. `POST /v1/chat/completions`? Allowed.
-- **Transparent** — No proxy config needed. iptables + mitmproxy transparent mode capture all traffic automatically.
-- **Identity hardening** — The proxy bypass is tied to the proxy process cgroup, not just a numeric UID/GID that another container might share.
-- **Hot-reload** — Update rules without restarting.
+- The AI agent uses `HTTP_PROXY` and `HTTPS_PROXY` to talk to `doubleagent`.
+- The AI only sees placeholder keys in its own environment.
+- `doubleagent` replaces placeholders in headers or query params.
+- `doubleagent` can block requests by method and path.
+- Mitmproxy generates the CA; `doubleagent` exports it to `/certs/ca.crt` for the AI container to trust.
 
 ## Quick start
 
@@ -40,8 +23,7 @@ doubleagent solves this by acting as a **double agent**: it pretends to be a tra
         {
           "placeholder": "PLACEHOLDER_OPENAI_KEY",
           "value_from_env": "OPENAI_API_KEY",
-          "inject_in": ["header:Authorization"],
-          "prefix": "Bearer "
+          "inject_in": ["header:Authorization"]
         }
       ],
       "block": [
@@ -50,7 +32,7 @@ doubleagent solves this by acting as a **double agent**: it pretends to be a tra
           "path_pattern": "/v1/files/*",
           "response": {
             "status": 403,
-            "body": { "error": "blocked by doubleagent" }
+            "body": {"error": "blocked by doubleagent"}
           }
         }
       ]
@@ -60,14 +42,12 @@ doubleagent solves this by acting as a **double agent**: it pretends to be a tra
 }
 ```
 
-**2. Add to your docker-compose.yml**
+**2. Add the sidecar to Compose**
 
 ```yaml
 services:
   doubleagent:
     build: .
-    cap_add:
-      - NET_ADMIN
     volumes:
       - certs:/certs
       - ./config.json:/config/config.json:ro
@@ -76,31 +56,31 @@ services:
 
   ai-agent:
     image: your-ai-agent:latest
-    network_mode: "service:doubleagent"
     depends_on:
       doubleagent:
         condition: service_healthy
     volumes:
-      - certs:/usr/local/share/ca-certificates/doubleagent:ro
-      - ./scripts/install-ca.sh:/scripts/install-ca.sh:ro
+      - certs:/certs:ro
     environment:
-      - OPENAI_API_KEY=PLACEHOLDER_OPENAI_KEY
-      - NODE_EXTRA_CA_CERTS=/usr/local/share/ca-certificates/doubleagent/ca.crt
-    entrypoint: sh -c "sh /scripts/install-ca.sh && exec your-command"
+      - OPENAI_API_KEY=Bearer PLACEHOLDER_OPENAI_KEY
+      - HTTP_PROXY=http://doubleagent:8080
+      - HTTPS_PROXY=http://doubleagent:8080
+      - NO_PROXY=localhost,127.0.0.1
+      - NODE_EXTRA_CA_CERTS=/certs/ca.crt
+      - REQUESTS_CA_BUNDLE=/certs/ca.crt
+      - SSL_CERT_FILE=/certs/ca.crt
+      - CURL_CA_BUNDLE=/certs/ca.crt
+      - GIT_SSL_CAINFO=/certs/ca.crt
 
 volumes:
   certs:
 ```
 
-Replace `your-command` with the AI image's real startup command. The CA must be installed in the `ai-agent` container, not the `doubleagent` sidecar, because the agent is the TLS client talking through the MITM proxy.
-
 **3. Run it**
 
-```
+```bash
 docker compose up
 ```
-
-The AI agent sees `PLACEHOLDER_OPENAI_KEY`. doubleagent replaces it with your real key on the wire. DELETE requests to `/v1/files/*` get a 403 back. The agent never knows.
 
 ## Development
 
@@ -109,26 +89,18 @@ python -m pip install -r requirements.txt
 python -m unittest discover -s tests -v
 ```
 
-Or use the helper targets:
+Or use:
 
 ```bash
 make install
 make test
 ```
 
-Run locally without touching iptables:
+Run locally:
 
 ```bash
-PYTHONPATH=. python -m doubleagent.main --skip-iptables --config /config/config.json
+PYTHONPATH=. python -m doubleagent.main --config /config/config.json
 ```
-
-## How it works
-
-doubleagent runs as a Docker sidecar that owns the network namespace. The AI container shares it via `network_mode: "service:doubleagent"`. All outbound HTTP/HTTPS traffic is captured by iptables NAT rules and redirected to a mitmproxy-powered transparent proxy, which terminates TLS with an auto-generated CA, inspects and modifies requests, then forwards them to the real destination.
-
-Internally, mitmproxy transparent mode listens on a single intercept port. Configure `http_port`, and `doubleagent` redirects all intercepted traffic to that mitmproxy listener.
-
-The CA is owned by mitmproxy. `doubleagent` exports the generated CA certificate to `ca.cert_path` so the agent container can trust it, but it does not generate leaf certificates or manage a separate CA key anymore.
 
 ## Config reference
 
@@ -141,17 +113,13 @@ If you want editor autocomplete and validation for a root-level `config.json`, a
 }
 ```
 
-**Secret injection** supports two locations:
+Secret injection supports:
 
-| Location | Example | What it does |
-|----------|---------|--------------|
-| `header:Name` | `header:Authorization` | Replace placeholder in the named header |
-| `query:param` | `query:api_key` | Replace placeholder in a query parameter |
+- `header:Name` - replace a placeholder in a header value
+- `query:param` - replace a placeholder in a query parameter
 
-Secrets can be set as a static `value` or loaded from environment variables with `value_from_env`. An optional `prefix` is prepended to the resolved value before injection — useful for `Authorization: Bearer <token>` patterns.
+Secrets can use `value` or `value_from_env`. If you need fixed text around the placeholder, include it in the original value, for example `Bearer PLACEHOLDER_OPENAI_KEY`.
 
-**Block rules** match by HTTP method and glob path pattern (`*` for single segment, `**` for multiple). Allow rules take priority over blocks.
+Block rules match HTTP method and glob path pattern. Allow rules override block rules.
 
-**Default policy** is `allow` (forward unmatched traffic) or `block` (block everything without an explicit rule).
-
-**Plain HTTP injection** is disabled by default. Set `allow_http_secret_injection: true` only for trusted plaintext upstreams such as localhost-only services.
+`default_policy` is `allow` or `block`.

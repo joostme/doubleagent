@@ -7,12 +7,11 @@
 # Usage:
 #   /scripts/install-ca.sh [path-to-ca.crt]
 #
-# If no path is given, defaults to /usr/local/share/ca-certificates/doubleagent/ca.crt
-# (the standard mount point from docker-compose.example.yml).
+# If no path is given, defaults to /certs/ca.crt.
 
 set -e
 
-CA_CERT="${1:-/usr/local/share/ca-certificates/doubleagent/ca.crt}"
+CA_CERT="${1:-/certs/ca.crt}"
 
 if [ ! -f "$CA_CERT" ]; then
     echo "doubleagent: CA cert not found at $CA_CERT — skipping trust store install."

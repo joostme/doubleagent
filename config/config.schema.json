@@ -47,11 +47,6 @@
       "type": "integer",
       "default": 9000,
       "title": "Health Port"
-    },
-    "allow_http_secret_injection": {
-      "type": "boolean",
-      "default": false,
-      "title": "Allow Http Secret Injection"
     }
   },
   "$defs": {
@@ -246,11 +241,6 @@
             "type": "string",
             "pattern": "^(header:.+|query:.+)$"
           }
-        },
-        "prefix": {
-          "type": "string",
-          "default": "",
-          "title": "Prefix"
         }
       },
       "required": [

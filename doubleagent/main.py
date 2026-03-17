@@ -12,13 +12,6 @@ from pathlib import Path
 from doubleagent.ca import export_generated_ca, prepare_confdir
 from doubleagent.config import load_config, resolve_secrets
 from doubleagent.health import HealthServer
-from doubleagent.iptables import add_pid_to_cgroup
-from doubleagent.iptables import build_proxy_cgroup_path
-from doubleagent.iptables import cleanup as cleanup_iptables
-from doubleagent.iptables import ensure_cgroup
-from doubleagent.iptables import get_process_cgroup_path
-from doubleagent.iptables import remove_cgroup
-from doubleagent.iptables import setup as setup_iptables
 from doubleagent.logging_utils import resolve_log_level
 
 
@@ -32,10 +25,8 @@ def create_logger(level: str) -> logging.Logger:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Transparent intercepting proxy sidecar for AI containers")
+    parser = argparse.ArgumentParser(description="Explicit proxy sidecar for AI containers")
     parser.add_argument("--config", default="/config/config.json", help="path to config file")
-    parser.add_argument("--skip-iptables", action="store_true", help="skip iptables setup (for testing)")
-    parser.add_argument("--cleanup-iptables", action="store_true", help="remove managed iptables rules and exit")
     return parser.parse_args()
 
 
@@ -44,7 +35,7 @@ def build_mitmdump_command(listen_port: int, confdir: Path) -> list[str]:
     return [
         "mitmdump",
         "--mode",
-        "transparent",
+        "regular",
         "--showhost",
         "--listen-host",
         "0.0.0.0",
@@ -67,7 +58,7 @@ def _terminate_child_process(child: subprocess.Popen[bytes] | subprocess.Popen[s
     try:
         child.wait(timeout=5)
     except subprocess.TimeoutExpired:
-        logger.warning("mitmdump did not exit after cgroup setup failure, killing it")
+        logger.warning("mitmdump did not exit cleanly, killing it")
         child.kill()
         child.wait()
 
@@ -84,15 +75,9 @@ def main() -> int:
             "log_level": config.log_level,
             "default_policy": config.default_policy,
             "rules": len(config.rules),
+            "mode": "explicit-proxy",
         },
     )
-
-    if args.cleanup_iptables:
-        if args.skip_iptables:
-            logger.warning("skipping iptables cleanup (test mode)")
-            return 0
-        cleanup_iptables(logger)
-        return 0
 
     resolve_secrets(config)
     logger.info("all secrets resolved successfully")
@@ -101,24 +86,6 @@ def main() -> int:
     ready = threading.Event()
     health_server = HealthServer(config.health_port, ready)
     health_server.start()
-
-    proxy_cgroup_path: str | None = None
-
-    if not args.skip_iptables:
-        parent_cgroup_path = get_process_cgroup_path()
-        proxy_cgroup_path = build_proxy_cgroup_path(parent_cgroup_path)
-        logger.info("using proxy cgroup path for bypass matching: %s", proxy_cgroup_path)
-        try:
-            ensure_cgroup(proxy_cgroup_path)
-            setup_iptables(config.http_port, proxy_cgroup_path, logger)
-        except Exception:
-            try:
-                remove_cgroup(proxy_cgroup_path)
-            except OSError:
-                pass
-            raise
-    else:
-        logger.warning("skipping iptables setup (test mode)")
 
     env = os.environ.copy()
     env["DOUBLEAGENT_CONFIG"] = args.config
@@ -129,21 +96,12 @@ def main() -> int:
     child = subprocess.Popen(cmd, env=env)
 
     try:
-        if proxy_cgroup_path is not None:
-            try:
-                add_pid_to_cgroup(child.pid, proxy_cgroup_path)
-            except OSError as exc:
-                logger.error(
-                    "failed to place mitmdump in proxy cgroup %s: %s. Ensure /sys/fs/cgroup is writable and cgroup v2 delegation is available in the container",
-                    proxy_cgroup_path,
-                    exc,
-                )
-                _terminate_child_process(child, logger)
-                raise RuntimeError(
-                    "unable to assign mitmdump to proxy child cgroup; ensure /sys/fs/cgroup is writable and cgroup v2 delegation is available in the container"
-                ) from exc
+        try:
+            export_generated_ca(confdir, config.ca.cert_path, logger)
+        except Exception:
+            _terminate_child_process(child, logger)
+            raise
 
-        export_generated_ca(confdir, config.ca.cert_path, logger)
         ready.set()
 
         def _forward(signum: int, _frame) -> None:
@@ -160,16 +118,6 @@ def main() -> int:
     finally:
         ready.clear()
         health_server.stop()
-        if not args.skip_iptables:
-            try:
-                cleanup_iptables(logger)
-            except Exception as exc:  # pragma: no cover
-                logger.warning("iptables cleanup failed: %s", exc)
-            if proxy_cgroup_path is not None:
-                try:
-                    remove_cgroup(proxy_cgroup_path)
-                except OSError as exc:  # pragma: no cover
-                    logger.warning("proxy cgroup cleanup failed: %s", exc)
 
 
 if __name__ == "__main__":
