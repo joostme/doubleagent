@@ -1,12 +1,22 @@
 # doubleagent - AI safety proxy sidecar
 #
-# This example uses explicit proxy mode.
-# The AI container talks to `http://doubleagent:8080` via HTTP_PROXY / HTTPS_PROXY.
-# doubleagent swaps placeholder secrets for real ones and blocks forbidden calls.
+# Network isolation model:
+#   - "agent_net" is an internal Docker network with NO internet access.
+#   - The AI container is connected ONLY to agent_net — even if it ignores
+#     HTTP_PROXY, opens raw sockets, or unsets env vars, packets have nowhere
+#     to go because there is no gateway to the outside world.
+#   - doubleagent is connected to BOTH agent_net and the default bridge,
+#     so it can receive requests from the AI and forward them to the internet.
+#
+# This makes enforcement mandatory at the network topology level rather than
+# relying on the AI container to cooperate via HTTP_PROXY conventions.
 
 services:
   doubleagent:
     build: .
+    networks:
+      - default
+      - agent_net
     volumes:
       - certs:/certs
       - ./config.json:/config/config.json:ro
@@ -24,6 +34,8 @@ services:
 
   ai-agent:
     image: my-ai-agent:latest
+    networks:
+      - agent_net          # only internal — no internet access
     depends_on:
       doubleagent:
         condition: service_healthy
@@ -33,6 +45,8 @@ services:
       - OPENAI_API_KEY=PLACEHOLDER_OPENAI_KEY
       - ANTHROPIC_API_KEY=PLACEHOLDER_ANTHROPIC_KEY
       - GITHUB_TOKEN=PLACEHOLDER_GITHUB_TOKEN
+      # The proxy env vars tell well-behaved HTTP clients where to go.
+      # Even if the agent ignores them, agent_net has no internet route.
       - HTTP_PROXY=http://doubleagent:8080
       - HTTPS_PROXY=http://doubleagent:8080
       - NO_PROXY=localhost,127.0.0.1
@@ -41,6 +55,16 @@ services:
       - SSL_CERT_FILE=/certs/ca.crt
       - CURL_CA_BUNDLE=/certs/ca.crt
       - GIT_SSL_CAINFO=/certs/ca.crt
+
+networks:
+  default:
+    # Standard Docker bridge — has internet access.
+    driver: bridge
+  agent_net:
+    # Internal network — Docker does not create a gateway or NAT rules,
+    # so containers on this network cannot reach the internet directly.
+    driver: bridge
+    internal: true
 
 volumes:
   certs:

@@ -1,14 +1,37 @@
 # doubleagent
 
-An explicit proxy sidecar for AI containers. It swaps placeholder secrets for real ones and blocks unsafe requests before they leave the stack.
+A proxy sidecar for AI containers that enforces network policy through topology-level isolation. It swaps placeholder secrets for real ones and blocks unsafe requests before they leave the stack.
 
 ## What it does
 
-- The AI agent uses `HTTP_PROXY` and `HTTPS_PROXY` to talk to `doubleagent`.
+- The AI agent is placed on an internal Docker network with **no internet access**.
+- `doubleagent` bridges between the isolated network and the internet, acting as the AI's only path out.
 - The AI only sees placeholder keys in its own environment.
-- `doubleagent` replaces placeholders in headers or query params.
+- `doubleagent` replaces placeholders in headers or query params with real secrets.
 - `doubleagent` can block requests by method and path.
-- Mitmproxy generates the CA; `doubleagent` exports it to `/certs/ca.crt` for the AI container to trust.
+- Even if the agent ignores `HTTP_PROXY`, opens raw sockets, or unsets env vars, it cannot reach the internet — the network topology itself is the enforcement layer.
+
+## Security model
+
+```
+                    ┌──────────────────────┐
+                    │     AI Agent         │
+                    │  (no internet route) │
+                    └──────────┬───────────┘
+                               │ agent_net (internal, no gateway)
+                    ┌──────────┴───────────┐
+                    │    doubleagent       │
+                    │  policy + secrets    │
+                    └──────────┬───────────┘
+                               │ default bridge (internet access)
+                    ┌──────────┴───────────┐
+                    │      Internet        │
+                    └──────────────────────┘
+```
+
+The AI container is connected **only** to `agent_net`, an `internal: true` Docker network. Docker does not create a gateway or NAT rules for internal networks, so there is no route to the outside world. The only service reachable by the AI is `doubleagent`, which inspects, filters, and forwards allowed requests.
+
+This is fundamentally stronger than relying on `HTTP_PROXY` alone, because enforcement is mandatory regardless of agent behavior.
 
 ## Quick start
 
@@ -50,6 +73,9 @@ Start from `config/config.example.json` and trim it down for your use case, or c
 services:
   doubleagent:
     build: .
+    networks:
+      - default      # internet access
+      - agent_net    # receives traffic from the AI
     volumes:
       - certs:/certs
       - ./config.json:/config/config.json:ro
@@ -58,6 +84,8 @@ services:
 
   ai-agent:
     image: your-ai-agent:latest
+    networks:
+      - agent_net    # NO internet access — only route is through doubleagent
     depends_on:
       doubleagent:
         condition: service_healthy
@@ -67,12 +95,16 @@ services:
       - OPENAI_API_KEY=Bearer PLACEHOLDER_OPENAI_KEY
       - HTTP_PROXY=http://doubleagent:8080
       - HTTPS_PROXY=http://doubleagent:8080
-      - NO_PROXY=localhost,127.0.0.1
       - NODE_EXTRA_CA_CERTS=/certs/ca.crt
       - REQUESTS_CA_BUNDLE=/certs/ca.crt
       - SSL_CERT_FILE=/certs/ca.crt
-      - CURL_CA_BUNDLE=/certs/ca.crt
-      - GIT_SSL_CAINFO=/certs/ca.crt
+
+networks:
+  default:
+    driver: bridge
+  agent_net:
+    driver: bridge
+    internal: true    # no gateway, no NAT — this is what makes it secure
 
 volumes:
   certs:
