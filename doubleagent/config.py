@@ -91,7 +91,6 @@ class Config(BaseModel):
     default_policy: str = "allow"
     http_port: int = 8080
     health_port: int = 9000
-    proxy_uid: int = 1000
     allow_http_secret_injection: bool = False
 
     @field_validator("log_level")

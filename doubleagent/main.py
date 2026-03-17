@@ -35,21 +35,6 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _drop_privileges_preexec(uid: int):
-    def _inner() -> None:
-        if os.geteuid() != 0:
-            return
-        if uid == 0:
-            raise RuntimeError("proxy_uid must not be 0 when running as root")
-        os.setgroups([])
-        os.setgid(uid)
-        os.setuid(uid)
-        if os.geteuid() != uid:
-            raise RuntimeError(f"failed to drop privileges to uid {uid}")
-
-    return _inner
-
-
 def build_mitmdump_command(listen_port: int, confdir: Path) -> list[str]:
     addon_path = Path(__file__).with_name("addon.py")
     return [
@@ -113,11 +98,7 @@ def main() -> int:
     cmd = build_mitmdump_command(config.http_port, confdir)
     logger.info("starting mitmdump: %s", " ".join(cmd))
 
-    child = subprocess.Popen(
-        cmd,
-        env=env,
-        preexec_fn=_drop_privileges_preexec(config.proxy_uid),
-    )
+    child = subprocess.Popen(cmd, env=env)
     export_generated_ca(confdir, config.ca.cert_path, logger)
     ready.set()
 

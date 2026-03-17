@@ -40,11 +40,6 @@
       "default": 9000,
       "title": "Health Port"
     },
-    "proxy_uid": {
-      "type": "integer",
-      "default": 1000,
-      "title": "Proxy Uid"
-    },
     "allow_http_secret_injection": {
       "type": "boolean",
       "default": false,
