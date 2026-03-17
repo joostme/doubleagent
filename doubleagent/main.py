@@ -95,13 +95,6 @@ def main() -> int:
     resolve_secrets(config)
     logger.info("all secrets resolved successfully")
 
-    if config.http_port != config.https_port:
-        logger.warning(
-            "mitmproxy transparent mode uses a single listen port; redirecting all traffic to http_port=%s (ignoring https_port=%s)",
-            config.http_port,
-            config.https_port,
-        )
-
     confdir = prepare_confdir(config.ca.cert_path, logger)
     ready = threading.Event()
     health_server = HealthServer(config.health_port, ready)

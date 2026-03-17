@@ -90,7 +90,6 @@ class Config(BaseModel):
     rules: list[Rule] = Field(default_factory=list)
     default_policy: str = "allow"
     http_port: int = 8080
-    https_port: int = 8443
     health_port: int = 9000
     proxy_uid: int = 1000
     allow_http_secret_injection: bool = False

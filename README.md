@@ -126,7 +126,7 @@ PYTHONPATH=. python -m doubleagent.main --skip-iptables --config /config/config.
 
 doubleagent runs as a Docker sidecar that owns the network namespace. The AI container shares it via `network_mode: "service:doubleagent"`. All outbound HTTP/HTTPS traffic is captured by iptables NAT rules and redirected to a mitmproxy-powered transparent proxy, which terminates TLS with an auto-generated CA, inspects and modifies requests, then forwards them to the real destination.
 
-Internally, mitmproxy transparent mode listens on a single intercept port. `doubleagent` keeps the historical `http_port` and `https_port` config fields for compatibility, but both protocols are redirected to the same mitmproxy listener.
+Internally, mitmproxy transparent mode listens on a single intercept port. Configure `http_port`, and `doubleagent` redirects all intercepted traffic to that mitmproxy listener.
 
 The CA is owned by mitmproxy. `doubleagent` exports the generated CA certificate to `ca.cert_path` so the agent container can trust it, but it does not generate leaf certificates or manage a separate CA key anymore.
 

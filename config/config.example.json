@@ -5,7 +5,6 @@
     "cert_path": "/certs/ca.crt"
   },
   "http_port": 8080,
-  "https_port": 8443,
   "proxy_uid": 1000,
   "allow_http_secret_injection": false,
   "rules": [
