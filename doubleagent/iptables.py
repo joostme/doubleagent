@@ -7,6 +7,8 @@ from pathlib import Path
 
 OUTPUT_CHAIN_V4 = "DOUBLEAGENT_OUTPUT"
 OUTPUT_CHAIN_V6 = "DOUBLEAGENT_OUTPUT_V6"
+CGROUP_ROOT = Path("/sys/fs/cgroup")
+PROXY_CGROUP_NAME = "doubleagent-proxy"
 
 def _parse_cgroup_v2_path(contents: str) -> str | None:
     for line in contents.splitlines():
@@ -29,6 +31,44 @@ def get_process_cgroup_path(proc_cgroup_path: str | Path = "/proc/self/cgroup") 
             "unable to determine proxy cgroup path from cgroup v2; refusing to install insecure UID-based bypass"
         )
     return cgroup_path
+
+
+def build_proxy_cgroup_path(
+    parent_cgroup_path: str,
+    name: str = PROXY_CGROUP_NAME,
+) -> str:
+    normalized = parent_cgroup_path.strip() or "/"
+    if not normalized.startswith("/"):
+        raise ValueError("cgroup path must be absolute")
+    if normalized == "/":
+        return f"/{name}"
+    return f"{normalized.rstrip('/')}/{name}"
+
+
+def _resolve_cgroup_dir(cgroup_path: str, cgroup_root: Path = CGROUP_ROOT) -> Path:
+    normalized = cgroup_path.strip() or "/"
+    if not normalized.startswith("/"):
+        raise ValueError("cgroup path must be absolute")
+    relative = normalized.lstrip("/")
+    return cgroup_root if not relative else cgroup_root / relative
+
+
+def ensure_cgroup(cgroup_path: str, cgroup_root: Path = CGROUP_ROOT) -> Path:
+    cgroup_dir = _resolve_cgroup_dir(cgroup_path, cgroup_root)
+    cgroup_dir.mkdir(exist_ok=True)
+    return cgroup_dir
+
+
+def add_pid_to_cgroup(pid: int, cgroup_path: str, cgroup_root: Path = CGROUP_ROOT) -> None:
+    procs_file = ensure_cgroup(cgroup_path, cgroup_root) / "cgroup.procs"
+    procs_file.write_text(f"{pid}\n", encoding="utf-8")
+
+
+def remove_cgroup(cgroup_path: str, cgroup_root: Path = CGROUP_ROOT) -> None:
+    cgroup_dir = _resolve_cgroup_dir(cgroup_path, cgroup_root)
+    if cgroup_dir == cgroup_root:
+        return
+    cgroup_dir.rmdir()
 
 
 def _run(binary: str, args: list[str], logger: logging.Logger) -> None:
