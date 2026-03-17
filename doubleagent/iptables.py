@@ -45,6 +45,16 @@ def build_proxy_cgroup_path(
     return f"{normalized.rstrip('/')}/{name}"
 
 
+def build_cgroup_match_path(cgroup_path: str) -> str:
+    normalized = cgroup_path.strip() or "/"
+    if not normalized.startswith("/"):
+        raise ValueError("cgroup path must be absolute")
+    relative = normalized.lstrip("/")
+    if not relative:
+        raise ValueError("iptables cgroup match path cannot target the root cgroup")
+    return relative
+
+
 def _resolve_cgroup_dir(cgroup_path: str, cgroup_root: Path = CGROUP_ROOT) -> Path:
     normalized = cgroup_path.strip() or "/"
     if not normalized.startswith("/"):
@@ -128,11 +138,12 @@ def _setup_family(
     proxy_cgroup_path: str,
     logger: logging.Logger,
 ) -> None:
+    match_path = build_cgroup_match_path(proxy_cgroup_path)
     _create_chain(binary, output_chain, logger)
     _flush_chain(binary, output_chain, logger)
 
     output_rules = [
-        ["-t", "nat", "-A", output_chain, "-m", "cgroup", "--path", proxy_cgroup_path, "-j", "RETURN"],
+        ["-t", "nat", "-A", output_chain, "-m", "cgroup", "--path", match_path, "-j", "RETURN"],
         ["-t", "nat", "-A", output_chain, "-o", "lo", "-j", "RETURN"],
         ["-t", "nat", "-A", output_chain, "-p", "tcp", "--dport", "80", "-j", "REDIRECT", "--to-ports", str(intercept_port)],
         ["-t", "nat", "-A", output_chain, "-p", "tcp", "--dport", "443", "-j", "REDIRECT", "--to-ports", str(intercept_port)],

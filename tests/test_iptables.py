@@ -5,6 +5,7 @@ import unittest
 from pathlib import Path
 
 from doubleagent.iptables import add_pid_to_cgroup
+from doubleagent.iptables import build_cgroup_match_path
 from doubleagent.iptables import build_proxy_cgroup_path
 from doubleagent.iptables import ensure_cgroup
 from doubleagent.iptables import get_process_cgroup_path
@@ -31,6 +32,15 @@ class IptablesTests(unittest.TestCase):
         self.assertEqual(
             build_proxy_cgroup_path("/docker/abc123"),
             "/docker/abc123/doubleagent-proxy",
+        )
+
+    def test_build_cgroup_match_path_strips_leading_slash(self) -> None:
+        self.assertEqual(build_cgroup_match_path("/doubleagent-proxy"), "doubleagent-proxy")
+
+    def test_build_cgroup_match_path_keeps_nested_relative_path(self) -> None:
+        self.assertEqual(
+            build_cgroup_match_path("/docker/abc123/doubleagent-proxy"),
+            "docker/abc123/doubleagent-proxy",
         )
 
     def test_manage_proxy_child_cgroup(self) -> None:
