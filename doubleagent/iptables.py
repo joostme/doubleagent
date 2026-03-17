@@ -6,10 +6,7 @@ from pathlib import Path
 
 
 OUTPUT_CHAIN_V4 = "DOUBLEAGENT_OUTPUT"
-PREROUTING_CHAIN_V4 = "DOUBLEAGENT_PREROUTING"
 OUTPUT_CHAIN_V6 = "DOUBLEAGENT_OUTPUT_V6"
-PREROUTING_CHAIN_V6 = "DOUBLEAGENT_PREROUTING_V6"
-
 
 def _parse_cgroup_v2_path(contents: str) -> str | None:
     for line in contents.splitlines():
@@ -124,32 +121,30 @@ def setup(intercept_port: int, proxy_cgroup_path: str, logger: logging.Logger) -
     logger.info("iptables rules installed successfully")
 
 
-def _cleanup_family(binary: str, output_chain: str, prerouting_chain: str, logger: logging.Logger, errors: list[str]) -> None:
-    for parent, child in (("OUTPUT", output_chain), ("PREROUTING", prerouting_chain)):
-        try:
-            _delete_jump(binary, parent, child, logger)
-        except RuntimeError as exc:
-            errors.append(str(exc))
+def _cleanup_family(binary: str, output_chain: str, logger: logging.Logger, errors: list[str]) -> None:
+    try:
+        _delete_jump(binary, "OUTPUT", output_chain, logger)
+    except RuntimeError as exc:
+        errors.append(str(exc))
 
-    for chain in (output_chain, prerouting_chain):
-        try:
-            _flush_chain(binary, chain, logger)
-        except RuntimeError as exc:
-            if not _is_missing_chain(exc):
-                errors.append(str(exc))
-        try:
-            _delete_chain(binary, chain, logger)
-        except RuntimeError as exc:
-            if not _is_missing_chain(exc):
-                errors.append(str(exc))
+    try:
+        _flush_chain(binary, output_chain, logger)
+    except RuntimeError as exc:
+        if not _is_missing_chain(exc):
+            errors.append(str(exc))
+    try:
+        _delete_chain(binary, output_chain, logger)
+    except RuntimeError as exc:
+        if not _is_missing_chain(exc):
+            errors.append(str(exc))
 
 
 def cleanup(logger: logging.Logger, log_missing: bool = True) -> None:
     logger.info("cleaning up iptables rules")
     errors: list[str] = []
-    _cleanup_family("iptables", OUTPUT_CHAIN_V4, PREROUTING_CHAIN_V4, logger, errors)
+    _cleanup_family("iptables", OUTPUT_CHAIN_V4, logger, errors)
     try:
-        _cleanup_family("ip6tables", OUTPUT_CHAIN_V6, PREROUTING_CHAIN_V6, logger, errors)
+        _cleanup_family("ip6tables", OUTPUT_CHAIN_V6, logger, errors)
     except RuntimeError as exc:
         errors.append(str(exc))
 
