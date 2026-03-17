@@ -87,7 +87,7 @@ class CAConfig(BaseModel):
 
 
 class Config(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict()
 
     log_level: str = "info"
     ca: CAConfig = Field(default_factory=CAConfig)

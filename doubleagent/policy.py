@@ -76,9 +76,8 @@ def check_block(
 def resolve_secrets_for_host(loaded: LoadedConfig, hostname: str) -> list[ResolvedSecret]:
     result: list[ResolvedSecret] = []
     for i, rule in enumerate(loaded.config.rules):
-        if not match_domain(hostname, rule.domains):
-            continue
-        result.extend(loaded.resolved_secrets.get(i, []))
+        if match_domain(hostname, rule.domains):
+            result.extend(loaded.resolved_secrets.get(i, []))
     return result
 
 

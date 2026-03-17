@@ -28,8 +28,6 @@ def get_process_cgroup_path(proc_cgroup_path: str | Path = "/proc/self/cgroup") 
         raise RuntimeError(
             "unable to determine proxy cgroup path from cgroup v2; refusing to install insecure UID-based bypass"
         )
-    if cgroup_path == "/":
-        raise RuntimeError("proxy process is running in the root cgroup; refusing to bypass all traffic")
     return cgroup_path
 
 
