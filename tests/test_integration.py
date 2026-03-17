@@ -24,43 +24,36 @@ def free_port() -> int:
 
 
 class EchoHandler(BaseHTTPRequestHandler):
-    def do_GET(self) -> None:  # noqa: N802
-        body = json.dumps(
-            {
-                "method": self.command,
-                "path": self.path,
-                "headers": dict(self.headers),
-            }
-        ).encode("utf-8")
+    def _send_json_response(self, body: dict) -> None:
+        payload = json.dumps(body).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Content-Length", str(len(payload)))
         self.end_headers()
-        self.wfile.write(body)
+        self.wfile.write(payload)
+
+    def _drain_request_body(self) -> None:
+        content_length = int(self.headers.get("Content-Length", "0"))
+        if content_length:
+            self.rfile.read(content_length)
+
+    def do_GET(self) -> None:  # noqa: N802
+        self._send_json_response({
+            "method": self.command,
+            "path": self.path,
+            "headers": dict(self.headers),
+        })
 
     def do_POST(self) -> None:  # noqa: N802
-        content_length = int(self.headers.get("Content-Length", "0"))
-        self.rfile.read(content_length)
-        body = json.dumps(
-            {
-                "method": self.command,
-                "path": self.path,
-                "headers": dict(self.headers),
-            }
-        ).encode("utf-8")
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
+        self._drain_request_body()
+        self._send_json_response({
+            "method": self.command,
+            "path": self.path,
+            "headers": dict(self.headers),
+        })
 
     def do_DELETE(self) -> None:  # noqa: N802
-        body = json.dumps({"method": self.command, "path": self.path}).encode("utf-8")
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
+        self._send_json_response({"method": self.command, "path": self.path})
 
     def log_message(self, format: str, *args) -> None:  # noqa: A003
         return

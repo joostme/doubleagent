@@ -6,12 +6,20 @@ import os
 import re
 from dataclasses import dataclass
 from functools import lru_cache
-from http.cookiejar import DefaultCookiePolicy
 from pathlib import Path
 from threading import RLock
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
+
+
+DEFAULT_CONFIG_PATH = "/config/config.json"
+
+
+class StrictBaseModel(BaseModel):
+    """Base model that rejects unknown fields."""
+
+    model_config = ConfigDict(extra="forbid")
 
 
 def _is_valid_inject_location(value: str) -> bool:
@@ -22,20 +30,22 @@ def _is_valid_inject_location(value: str) -> bool:
     return kind in {"header", "query"} and bool(":".join(rest))
 
 
-class BlockResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class BlockResponse(StrictBaseModel):
     status: int = Field(ge=100, le=599)
     body: dict[str, Any]
 
 
-class SecretRule(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class SecretRule(StrictBaseModel):
     placeholder: str = Field(min_length=1)
     value: str | None = None
     value_from_env: str | None = None
     inject_in: list[str] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_secret_source(self) -> SecretRule:
+        if self.value is not None and self.value_from_env is not None:
+            raise ValueError("secret must set either 'value' or 'value_from_env', not both")
+        return self
 
     @field_validator("inject_in")
     @classmethod
@@ -45,24 +55,18 @@ class SecretRule(BaseModel):
         return value
 
 
-class BlockRule(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class BlockRule(StrictBaseModel):
     method: str | None = None
     path_pattern: str = Field(min_length=1)
     response: BlockResponse
 
 
-class AllowRule(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class AllowRule(StrictBaseModel):
     method: str | None = None
     path_pattern: str | None = None
 
 
-class Rule(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class Rule(StrictBaseModel):
     domains: list[str] = Field(min_length=1)
     secrets: list[SecretRule] = Field(default_factory=list)
     block: bool | list[BlockRule] = Field(default_factory=list)
@@ -75,15 +79,11 @@ class Rule(BaseModel):
         return self
 
 
-class CAConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class CAConfig(StrictBaseModel):
     cert_path: str = "/certs/ca.crt"
 
 
-class Config(BaseModel):
-    model_config = ConfigDict()
-
+class Config(StrictBaseModel):
     log_level: str = "info"
     ca: CAConfig = Field(default_factory=CAConfig)
     rules: list[Rule] = Field(default_factory=list)
@@ -124,28 +124,31 @@ def load_config(path: str | os.PathLike[str]) -> Config:
     return Config.model_validate_json(data)
 
 
+def _resolve_secret_value(secret: SecretRule, rule_index: int) -> str:
+    if secret.value_from_env is None:
+        return secret.value or ""
+
+    value = os.environ.get(secret.value_from_env, "")
+    if not value:
+        raise RuntimeError(f'rule {rule_index}: env var "{secret.value_from_env}" is not set')
+    return value
+
+
 def resolve_secrets(config: Config) -> dict[int, list[ResolvedSecret]]:
-    result: dict[int, list[ResolvedSecret]] = {}
-    for i, rule in enumerate(config.rules):
-        secrets: list[ResolvedSecret] = []
+    resolved_by_rule: dict[int, list[ResolvedSecret]] = {}
+    for rule_index, rule in enumerate(config.rules):
+        resolved_secrets: list[ResolvedSecret] = []
         for secret in rule.secrets:
-            value = secret.value or ""
-            if secret.value_from_env:
-                value = os.environ.get(secret.value_from_env, "")
-                if not value:
-                    raise RuntimeError(
-                        f'rule {i}: env var "{secret.value_from_env}" is not set'
-                    )
-            secrets.append(
+            resolved_secrets.append(
                 ResolvedSecret(
                     placeholder=secret.placeholder,
-                    resolved_value=value,
+                    resolved_value=_resolve_secret_value(secret, rule_index),
                     inject_in=tuple(secret.inject_in),
                 )
             )
-        if secrets:
-            result[i] = secrets
-    return result
+        if resolved_secrets:
+            resolved_by_rule[rule_index] = resolved_secrets
+    return resolved_by_rule
 
 
 def _strip_host_port(hostname: str) -> str:
@@ -168,9 +171,16 @@ def _normalize_domain_pattern(pattern: str) -> str:
     return current
 
 
-@lru_cache(maxsize=256)
-def _domain_policy(pattern: str) -> DefaultCookiePolicy:
-    return DefaultCookiePolicy(blocked_domains=(pattern,))
+def _match_single_domain(host: str, pattern: str) -> bool:
+    """Match a hostname against a single normalized domain pattern.
+
+    An exact match is required unless the pattern starts with '.',
+    in which case any subdomain matches (but not the bare domain itself).
+    For example, '.example.com' matches 'sub.example.com' but NOT 'example.com'.
+    """
+    if pattern.startswith("."):
+        return host.endswith(pattern)
+    return host == pattern
 
 
 def match_domain(hostname: str, patterns: list[str]) -> bool:
@@ -179,7 +189,7 @@ def match_domain(hostname: str, patterns: list[str]) -> bool:
         current = _normalize_domain_pattern(pattern)
         if not current:
             continue
-        if _domain_policy(current).is_blocked(host):
+        if _match_single_domain(host, current):
             return True
     return False
 
@@ -199,12 +209,12 @@ class ConfigStore:
         self.logger = logger or logging.getLogger(__name__)
         self._lock = RLock()
         self._mtime_ns: int | None = None
-        self._loaded = self._load_current()
+        self._current = self._load_current()
 
     def get(self) -> LoadedConfig:
         with self._lock:
             self._reload_if_needed()
-            return self._loaded
+            return self._current
 
     def _load_current(self) -> LoadedConfig:
         config = load_config(self.path)
@@ -224,7 +234,7 @@ class ConfigStore:
 
         self.logger.info("config file changed, reloading: %s", self.path)
         try:
-            self._loaded = self._load_current()
+            self._current = self._load_current()
         except (ValidationError, RuntimeError, ValueError) as exc:
             self.logger.error("failed to reload config, keeping previous version: %s", exc)
         else:

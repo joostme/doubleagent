@@ -10,9 +10,12 @@ import threading
 from pathlib import Path
 
 from doubleagent.ca import export_generated_ca, prepare_confdir
-from doubleagent.config import load_config, resolve_secrets
+from doubleagent.config import DEFAULT_CONFIG_PATH, Config, load_config, resolve_secrets
 from doubleagent.health import HealthServer
 from doubleagent.logging_utils import resolve_log_level
+
+
+APP_PYTHONPATH = "/app"
 
 
 def create_logger(level: str) -> logging.Logger:
@@ -26,11 +29,11 @@ def create_logger(level: str) -> logging.Logger:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Explicit proxy sidecar for AI containers")
-    parser.add_argument("--config", default="/config/config.json", help="path to config file")
+    parser.add_argument("--config", default=DEFAULT_CONFIG_PATH, help="path to config file")
     return parser.parse_args()
 
 
-def build_mitmdump_command(listen_port: int, confdir: Path) -> list[str]:
+def build_mitmdump_command(listen_port: int, confdir: str | Path) -> list[str]:
     addon_path = Path(__file__).with_name("addon.py")
     return [
         "mitmdump",
@@ -50,6 +53,15 @@ def build_mitmdump_command(listen_port: int, confdir: Path) -> list[str]:
     ]
 
 
+def build_proxy_environment(config_path: str) -> dict[str, str]:
+    env = os.environ.copy()
+    env["DOUBLEAGENT_CONFIG"] = config_path
+
+    existing_pythonpath = env.get("PYTHONPATH")
+    env["PYTHONPATH"] = APP_PYTHONPATH if not existing_pythonpath else f"{APP_PYTHONPATH}:{existing_pythonpath}"
+    return env
+
+
 def _terminate_child_process(child: subprocess.Popen[bytes] | subprocess.Popen[str], logger: logging.Logger) -> None:
     try:
         child.terminate()
@@ -63,15 +75,11 @@ def _terminate_child_process(child: subprocess.Popen[bytes] | subprocess.Popen[s
         child.wait()
 
 
-def main() -> int:
-    args = parse_args()
-    config = load_config(args.config)
-    logger = create_logger(config.log_level)
-
+def _log_startup(config_path: str, config: Config, logger: logging.Logger) -> None:
     logger.info(
         "doubleagent starting",
         extra={
-            "config": args.config,
+            "config": config_path,
             "log_level": config.log_level,
             "default_policy": config.default_policy,
             "rules": len(config.rules),
@@ -79,6 +87,44 @@ def main() -> int:
         },
     )
 
+
+def _export_ca_or_stop(
+    child: subprocess.Popen[bytes] | subprocess.Popen[str],
+    confdir: Path,
+    cert_path: str,
+    logger: logging.Logger,
+) -> None:
+    try:
+        export_generated_ca(confdir, cert_path, logger)
+    except Exception:
+        _terminate_child_process(child, logger)
+        raise
+
+
+def _install_signal_handlers(
+    child: subprocess.Popen[bytes] | subprocess.Popen[str],
+    logger: logging.Logger,
+) -> None:
+    def _forward(signum: int, _frame: object | None) -> None:
+        logger.info("received signal %s, forwarding to mitmdump", signum)
+        try:
+            child.send_signal(signum)
+        except ProcessLookupError:
+            pass
+
+    signal.signal(signal.SIGINT, _forward)
+    signal.signal(signal.SIGTERM, _forward)
+
+
+def main() -> int:
+    args = parse_args()
+    config = load_config(args.config)
+    logger = create_logger(config.log_level)
+
+    _log_startup(args.config, config, logger)
+
+    # Validate that all secret env vars are set before starting the proxy.
+    # The actual resolved secrets are loaded per-request by ConfigStore in the addon.
     resolve_secrets(config)
     logger.info("all secrets resolved successfully")
 
@@ -87,32 +133,17 @@ def main() -> int:
     health_server = HealthServer(config.health_port, ready)
     health_server.start()
 
-    env = os.environ.copy()
-    env["DOUBLEAGENT_CONFIG"] = args.config
-    env["PYTHONPATH"] = f"/app:{env.get('PYTHONPATH', '')}".rstrip(":")
+    env = build_proxy_environment(args.config)
     cmd = build_mitmdump_command(config.http_port, confdir)
     logger.info("starting mitmdump: %s", " ".join(cmd))
 
     child = subprocess.Popen(cmd, env=env)
 
     try:
-        try:
-            export_generated_ca(confdir, config.ca.cert_path, logger)
-        except Exception:
-            _terminate_child_process(child, logger)
-            raise
+        _export_ca_or_stop(child, confdir, config.ca.cert_path, logger)
 
         ready.set()
-
-        def _forward(signum: int, _frame) -> None:
-            logger.info("received signal %s, forwarding to mitmdump", signum)
-            try:
-                child.send_signal(signum)
-            except ProcessLookupError:
-                pass
-
-        signal.signal(signal.SIGINT, _forward)
-        signal.signal(signal.SIGTERM, _forward)
+        _install_signal_handlers(child, logger)
 
         return child.wait()
     finally:

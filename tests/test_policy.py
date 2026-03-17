@@ -67,10 +67,8 @@ class PolicyTests(unittest.TestCase):
         inject_request_secrets(
             self.loaded,
             "api.example.com",
-            "https",
             headers,
             query,
-            self.logger,
         )
         self.assertEqual(headers["authorization"], "Bearer real-secret")
         self.assertEqual(query["api_key"], "real-secret")

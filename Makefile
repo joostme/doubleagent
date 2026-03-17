@@ -15,4 +15,4 @@ test:
 	$(PYTHON) -m unittest discover -s tests -v
 
 run:
-	PYTHONPATH=. $(PYTHON) -m doubleagent.main --skip-iptables --config /config/config.json
+	PYTHONPATH=. $(PYTHON) -m doubleagent.main --config /config/config.json

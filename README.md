@@ -14,6 +14,8 @@ An explicit proxy sidecar for AI containers. It swaps placeholder secrets for re
 
 **1. Create a config file**
 
+Start from `config/config.example.json` and trim it down for your use case, or create a minimal file like this:
+
 ```json
 {
   "rules": [
@@ -82,6 +84,8 @@ volumes:
 docker compose up
 ```
 
+The proxy exposes `GET /healthz` and `GET /readyz` on port `9000` by default.
+
 ## Development
 
 ```bash
@@ -121,5 +125,9 @@ Secret injection supports:
 Secrets can use `value` or `value_from_env`. If you need fixed text around the placeholder, include it in the original value, for example `Bearer PLACEHOLDER_OPENAI_KEY`.
 
 Block rules match HTTP method and glob path pattern. Allow rules override block rules.
+
+Set `allow: true` to allow every request for matching domains, or `block: true` to block every request for matching domains.
+
+`doubleagent` reloads the config file automatically when it changes. If a reload fails, it keeps serving the last valid configuration.
 
 `default_policy` is `allow` or `block`.

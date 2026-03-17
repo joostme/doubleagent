@@ -5,6 +5,7 @@ import shutil
 import time
 from pathlib import Path
 
+
 def prepare_confdir(cert_path: str, logger: logging.Logger) -> Path:
     cert_file = Path(cert_path)
     cert_file.parent.mkdir(parents=True, exist_ok=True)

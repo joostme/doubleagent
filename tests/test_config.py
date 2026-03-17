@@ -13,8 +13,9 @@ from doubleagent.logging_utils import resolve_log_level
 
 class ConfigTests(unittest.TestCase):
     def _write_config(self, payload: str) -> str:
-        tmpdir = tempfile.mkdtemp(prefix="doubleagent-config-")
-        path = Path(tmpdir) / "config.json"
+        tmpdir = tempfile.TemporaryDirectory(prefix="doubleagent-config-")
+        self.addCleanup(tmpdir.cleanup)
+        path = Path(tmpdir.name) / "config.json"
         path.write_text(payload, encoding="utf-8")
         return str(path)
 
@@ -38,6 +39,7 @@ class ConfigTests(unittest.TestCase):
         self.assertTrue(match_path("/v1/files/report.json", "/v1/files/*.json"))
 
     def test_resolve_secrets_from_env(self) -> None:
+        self.addCleanup(os.environ.pop, "TEST_KEY", None)
         os.environ["TEST_KEY"] = "secret-value"
         path = self._write_config(
             '{"rules": [{"domains": ["x.com"], "secrets": [{"placeholder": "PH", "value_from_env": "TEST_KEY", "inject_in": ["header:Authorization"]}]}]}'
@@ -76,10 +78,35 @@ class ConfigTests(unittest.TestCase):
         self.assertTrue(config.rules[0].allow)
         self.assertTrue(config.rules[1].block)
 
+    def test_load_config_rejects_unknown_root_field(self) -> None:
+        path = self._write_config('{"rules": [], "unexpected": true}')
+        with self.assertRaises(ValidationError):
+            load_config(path)
+
     def test_rule_rejects_both_allow_and_block_true(self) -> None:
         with self.assertRaises(ValidationError):
             Config.model_validate(
                 {"rules": [{"domains": ["example.com"], "allow": True, "block": True}]}
+            )
+
+    def test_secret_rejects_both_value_and_value_from_env(self) -> None:
+        with self.assertRaises(ValidationError):
+            Config.model_validate(
+                {
+                    "rules": [
+                        {
+                            "domains": ["x.com"],
+                            "secrets": [
+                                {
+                                    "placeholder": "PH",
+                                    "value": "inline-secret",
+                                    "value_from_env": "SOME_VAR",
+                                    "inject_in": ["header:Authorization"],
+                                }
+                            ],
+                        }
+                    ]
+                }
             )
 
 
