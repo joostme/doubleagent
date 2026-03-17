@@ -15,8 +15,6 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 
 
 def _is_valid_inject_location(value: str) -> bool:
-    if value == "body":
-        return True
     parts = value.split(":")
     if len(parts) < 2:
         return False
@@ -44,9 +42,7 @@ class SecretRule(BaseModel):
     @classmethod
     def validate_inject_in(cls, value: list[str]) -> list[str]:
         if not all(_is_valid_inject_location(item) for item in value):
-            raise ValueError(
-                "inject_in entries must be 'body', 'header:<name>', or 'query:<name>'"
-            )
+            raise ValueError("inject_in entries must be 'header:<name>' or 'query:<name>'")
         return value
 
 

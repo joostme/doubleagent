@@ -40,13 +40,12 @@ class EchoHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         content_length = int(self.headers.get("Content-Length", "0"))
-        data = self.rfile.read(content_length)
+        self.rfile.read(content_length)
         body = json.dumps(
             {
                 "method": self.command,
                 "path": self.path,
                 "headers": dict(self.headers),
-                "body": data.decode("utf-8"),
             }
         ).encode("utf-8")
         self.send_response(200)
@@ -91,7 +90,7 @@ class MitmproxyIntegrationTests(unittest.TestCase):
                         {{
                           "placeholder": "PLACEHOLDER_KEY",
                           "value": "real-secret-value",
-                          "inject_in": ["header:Authorization", "body"],
+                          "inject_in": ["header:Authorization", "query:api_key"],
                           "prefix": "Bearer "
                         }}
                       ],
@@ -187,16 +186,16 @@ class MitmproxyIntegrationTests(unittest.TestCase):
         payload = json.loads(cm.exception.read().decode("utf-8"))
         self.assertEqual(payload["error"], "blocked")
 
-    def test_injects_secret_in_header_and_body(self) -> None:
+    def test_injects_secret_in_header_and_query(self) -> None:
         response = self._request(
             "POST",
-            "/v1/test",
+            "/v1/test?api_key=PLACEHOLDER_KEY",
             body=b'{"key":"PLACEHOLDER_KEY"}',
             headers={"Authorization": "PLACEHOLDER_KEY", "Content-Type": "application/json"},
         )
         payload = json.loads(response.read().decode("utf-8"))
         self.assertEqual(payload["headers"]["Authorization"], "Bearer real-secret-value")
-        self.assertIn("Bearer real-secret-value", payload["body"])
+        self.assertIn("api_key=Bearer+real-secret-value", payload["path"])
 
 
 if __name__ == "__main__":

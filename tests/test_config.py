@@ -41,11 +41,24 @@ class ConfigTests(unittest.TestCase):
     def test_resolve_secrets_from_env(self) -> None:
         os.environ["TEST_KEY"] = "secret-value"
         path = self._write_config(
-            '{"rules": [{"domains": ["x.com"], "secrets": [{"placeholder": "PH", "value_from_env": "TEST_KEY", "inject_in": ["body"]}]}]}'
+            '{"rules": [{"domains": ["x.com"], "secrets": [{"placeholder": "PH", "value_from_env": "TEST_KEY", "inject_in": ["header:Authorization"]}]}]}'
         )
         config = load_config(path)
         resolved = resolve_secrets(config)
         self.assertEqual(resolved[0][0].resolved_value, "secret-value")
+
+    def test_rejects_body_secret_injection(self) -> None:
+        with self.assertRaises(ValidationError):
+            Config.model_validate(
+                {
+                    "rules": [
+                        {
+                            "domains": ["x.com"],
+                            "secrets": [{"placeholder": "PH", "value": "secret", "inject_in": ["body"]}],
+                        }
+                    ]
+                }
+            )
 
     def test_resolve_log_level_accepts_warning(self) -> None:
         self.assertEqual(resolve_log_level("warning"), 30)

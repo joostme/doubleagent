@@ -98,31 +98,18 @@ def inject_request_secrets(
     scheme: str,
     headers: MutableMapping[str, str],
     query: MutableMapping[str, str],
-    body: bytes | None,
     logger: logging.Logger,
-) -> bytes | None:
+) -> None:
     secrets = resolve_secrets_for_host(loaded, hostname)
     if not secrets:
-        return body
+        return
 
     if scheme.lower() != "https" and not loaded.config.allow_http_secret_injection:
         logger.warning(
             "refusing to inject secrets into plaintext HTTP request for host %s",
             hostname,
         )
-        return body
-
-    new_body = body
-    needs_body_injection = any("body" in secret.inject_in for secret in secrets)
-    body_text: str | None = None
-    if needs_body_injection and body is not None:
-        try:
-            body_text = body.decode("utf-8")
-        except UnicodeDecodeError:
-            logger.warning(
-                "skipping body secret injection for host %s: request body is not utf-8",
-                hostname,
-            )
+        return
 
     for secret in secrets:
         full_value = f"{secret.prefix}{secret.resolved_value}"
@@ -141,9 +128,3 @@ def inject_request_secrets(
                         query_name,
                         current_value.replace(secret.placeholder, full_value),
                     )
-            elif location == "body" and body_text is not None and secret.placeholder in body_text:
-                body_text = body_text.replace(secret.placeholder, full_value)
-
-    if body_text is not None:
-        new_body = body_text.encode("utf-8")
-    return new_body

@@ -41,17 +41,14 @@ class DoubleAgentAddon:
             )
             return
 
-        new_body = inject_request_secrets(
+        inject_request_secrets(
             loaded=loaded,
             hostname=host,
             scheme=flow.request.scheme,
             headers=flow.request.headers,
             query=flow.request.query,
-            body=flow.request.content,
             logger=LOGGER,
         )
-        if new_body is not None and new_body != flow.request.content:
-            flow.request.content = new_body
 
 
 addons = [DoubleAgentAddon()]

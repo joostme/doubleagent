@@ -21,7 +21,7 @@ AI agents need API keys to work. But giving an agent real credentials means it c
 
 doubleagent solves this by acting as a **double agent**: it pretends to be a transparent network to the AI, while secretly working for you — swapping in real keys and enforcing your rules.
 
-- **Secret injection** — The AI only sees placeholder keys. doubleagent swaps them for real credentials in-flight, in headers, query params, or request bodies.
+- **Secret injection** — The AI only sees placeholder keys. doubleagent swaps them for real credentials in-flight, in headers or query params.
 - **Request blocking** — Block dangerous API calls by method and path pattern. `DELETE /repos/*/*`? Blocked. `POST /v1/chat/completions`? Allowed.
 - **Transparent** — No proxy config needed. iptables + mitmproxy transparent mode capture all traffic automatically.
 - **Identity hardening** — The proxy bypass is tied to the proxy process cgroup, not just a numeric UID/GID that another container might share.
@@ -141,13 +141,12 @@ If you want editor autocomplete and validation for a root-level `config.json`, a
 }
 ```
 
-**Secret injection** supports three locations:
+**Secret injection** supports two locations:
 
 | Location | Example | What it does |
 |----------|---------|--------------|
 | `header:Name` | `header:Authorization` | Replace placeholder in the named header |
 | `query:param` | `query:api_key` | Replace placeholder in a query parameter |
-| `body` | `body` | Replace placeholder anywhere in the request body |
 
 Secrets can be set as a static `value` or loaded from environment variables with `value_from_env`. An optional `prefix` is prepended to the resolved value before injection — useful for `Authorization: Bearer <token>` patterns.
 
