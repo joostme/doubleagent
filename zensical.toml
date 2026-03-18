@@ -1,0 +1,63 @@
+[project]
+site_name = "doubleagent"
+site_description = "The security gateway for AI agents that don't need to be trusted."
+site_url = "https://doubleagent.dev"
+copyright = "&copy; 2025 doubleagent contributors"
+
+docs_dir = "docs"
+site_dir = "site"
+
+nav = [
+  { "Home" = "index.md" },
+  { "Getting Started" = [
+    "getting-started/index.md",
+    "getting-started/quick-start.md",
+    "getting-started/adding-mcp-servers.md",
+  ]},
+  { "Configuration" = [
+    "configuration/index.md",
+    "configuration/rules.md",
+    "configuration/secrets.md",
+    "configuration/port-forwarding.md",
+  ]},
+  { "Concepts" = [
+    "concepts/architecture.md",
+    "concepts/network-isolation.md",
+    "concepts/secret-injection.md",
+  ]},
+  { "Guides" = [
+    "guides/troubleshooting.md",
+    "guides/development.md",
+  ]},
+]
+
+[project.theme]
+features = [
+  "navigation.instant",
+  "navigation.instant.prefetch",
+  "navigation.instant.progress",
+  "navigation.tabs",
+  "navigation.tabs.sticky",
+  "navigation.sections",
+  "navigation.path",
+  "navigation.indexes",
+  "navigation.top",
+  "toc.follow",
+  "search.suggest",
+  "search.highlight",
+]
+
+[project.theme.palette]
+scheme = "slate"
+primary = "deep purple"
+accent = "purple"
+
+[project.extra]
+social = [
+  { icon = "fontawesome/brands/github", link = "https://github.com/doubleagent-ai/doubleagent" },
+]
+
+[project.markdown_extensions.pymdownx]
+highlight = { anchor_linenums = true }
+superfences = {}
+tabbed = { alternate_style = true }

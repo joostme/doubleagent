@@ -9,3 +9,5 @@ __pycache__/
 temp
 node_modules/
 release-notes.md
+site/
+.docs-venv/
