@@ -86,7 +86,7 @@ class MainTests(unittest.TestCase):
         self.assertEqual(main.main(), 0)
 
         mock_resolve_secrets.assert_called_once()
-        mock_build_mitmdump_command.assert_called_once_with(8080, "/tmp/confdir")
+        mock_build_mitmdump_command.assert_called_once_with(8080, "/tmp/confdir", "info")
         mock_popen.assert_called_once_with(["mitmdump"], env=ANY)
         mock_export_generated_ca.assert_called_once_with("/tmp/confdir", "/tmp/ca.crt", ANY)
         child.wait.assert_called_once_with()

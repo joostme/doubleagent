@@ -34,7 +34,20 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def build_mitmdump_command(listen_port: int, confdir: str | Path) -> list[str]:
+def _mitmdump_termlog_verbosity(log_level: str) -> str:
+    return {
+        "debug": "debug",
+        "info": "warn",
+        "warning": "warn",
+        "error": "error",
+    }[log_level]
+
+
+def _mitmdump_flow_detail(log_level: str) -> int:
+    return 1 if log_level == "debug" else 0
+
+
+def build_mitmdump_command(listen_port: int, confdir: str | Path, log_level: str) -> list[str]:
     addon_path = Path(__file__).with_name("addon.py")
     return [
         "mitmdump",
@@ -51,6 +64,10 @@ def build_mitmdump_command(listen_port: int, confdir: str | Path) -> list[str]:
         f"confdir={confdir}",
         "--set",
         "block_global=false",
+        "--set",
+        f"termlog_verbosity={_mitmdump_termlog_verbosity(log_level)}",
+        "--set",
+        f"flow_detail={_mitmdump_flow_detail(log_level)}",
     ]
 
 
@@ -149,7 +166,7 @@ def main() -> int:
     forwarder = PortForwarder(forward_targets, logger) if forward_targets else None
 
     env = build_proxy_environment(args.config)
-    cmd = build_mitmdump_command(config.http_port, confdir)
+    cmd = build_mitmdump_command(config.http_port, confdir, config.log_level)
     logger.info("starting mitmdump: %s", " ".join(cmd))
 
     child = subprocess.Popen(cmd, env=env)
