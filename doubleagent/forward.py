@@ -31,25 +31,40 @@ class ForwardTarget(NamedTuple):
 def _build_socat_command(
     target: ForwardTarget,
     listen_host: str = DEFAULT_LISTEN_HOST,
+    log_level: str = "info",
 ) -> list[str]:
-    return [
+    command = [
         "socat",
+    ]
+    if log_level == "debug":
+        command.append("-dddd")
+    elif log_level == "error":
+        command.append("-d0")
+
+    command.extend([
         f"TCP-LISTEN:{target.listen_port},bind={listen_host},reuseaddr,fork",
         f"TCP:{target.target_host}:{target.target_port}",
-    ]
+    ])
+    return command
 
 
 class PortForwarder:
     """Manages socat processes for TCP port forwarding."""
 
-    def __init__(self, targets: list[ForwardTarget], logger: logging.Logger | None = None):
+    def __init__(
+        self,
+        targets: list[ForwardTarget],
+        logger: logging.Logger | None = None,
+        log_level: str = "info",
+    ):
         self._targets = targets
         self._logger = logger or logging.getLogger(__name__)
+        self._log_level = log_level
         self._processes: list[subprocess.Popen[bytes]] = []
 
     def start(self) -> None:
         for target in self._targets:
-            cmd = _build_socat_command(target)
+            cmd = _build_socat_command(target, log_level=self._log_level)
             self._logger.info("forward: %s", " ".join(cmd))
             proc = subprocess.Popen(cmd)
             self._processes.append(proc)

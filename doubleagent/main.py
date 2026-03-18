@@ -163,7 +163,7 @@ def main() -> int:
     health_server.start()
 
     forward_targets = _build_forward_targets(config)
-    forwarder = PortForwarder(forward_targets, logger) if forward_targets else None
+    forwarder = PortForwarder(forward_targets, logger, config.log_level) if forward_targets else None
 
     env = build_proxy_environment(args.config)
     cmd = build_mitmdump_command(config.http_port, confdir, config.log_level)

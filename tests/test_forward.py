@@ -26,6 +26,26 @@ class TestBuildSocatCommand(unittest.TestCase):
             "TCP:ai-agent:8080",
         ])
 
+    def test_debug_log_level_enables_verbose_socat_logging(self) -> None:
+        target = ForwardTarget(listen_port=3000, target_host="ai-agent", target_port=8080)
+        cmd = _build_socat_command(target, log_level="debug")
+        self.assertEqual(cmd, [
+            "socat",
+            "-dddd",
+            "TCP-LISTEN:3000,bind=0.0.0.0,reuseaddr,fork",
+            "TCP:ai-agent:8080",
+        ])
+
+    def test_error_log_level_suppresses_socat_warnings(self) -> None:
+        target = ForwardTarget(listen_port=3000, target_host="ai-agent", target_port=8080)
+        cmd = _build_socat_command(target, log_level="error")
+        self.assertEqual(cmd, [
+            "socat",
+            "-d0",
+            "TCP-LISTEN:3000,bind=0.0.0.0,reuseaddr,fork",
+            "TCP:ai-agent:8080",
+        ])
+
     def test_custom_listen_host(self) -> None:
         target = ForwardTarget(listen_port=4000, target_host="backend", target_port=5000)
         cmd = _build_socat_command(target, listen_host="127.0.0.1")
@@ -69,6 +89,23 @@ class TestPortForwarderLifecycle(unittest.TestCase):
             "socat",
             "TCP-LISTEN:4000,bind=0.0.0.0,reuseaddr,fork",
             "TCP:ai-agent:4000",
+        ])
+
+    @patch("doubleagent.forward.subprocess.Popen")
+    def test_start_passes_debug_logging_to_socat(self, mock_popen: Mock) -> None:
+        proc = Mock()
+        mock_popen.return_value = proc
+
+        forwarder = PortForwarder([
+            ForwardTarget(listen_port=3000, target_host="ai-agent", target_port=3000),
+        ], log_level="debug")
+        forwarder.start()
+
+        mock_popen.assert_called_once_with([
+            "socat",
+            "-dddd",
+            "TCP-LISTEN:3000,bind=0.0.0.0,reuseaddr,fork",
+            "TCP:ai-agent:3000",
         ])
 
     @patch("doubleagent.forward.subprocess.Popen")
