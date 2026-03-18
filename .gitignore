@@ -8,5 +8,4 @@ __pycache__/
 .coverage
 temp
 node_modules/
-package-lock.json
 release-notes.md
