@@ -21,12 +21,7 @@ def _method_matches(request_method: str, rule_method: str | None) -> bool:
     return rule_method is None or rule_method.upper() == request_method.upper()
 
 
-def _matches_allow_rule(method: str, path: str, allow_rules: bool | list[AllowRule]) -> bool:
-    if allow_rules is True:
-        return True
-    if allow_rules is False:
-        return False
-
+def _matches_allow_rule(method: str, path: str, allow_rules: list[AllowRule]) -> bool:
     for allow in allow_rules:
         method_match = _method_matches(method, allow.method)
         path_match = not allow.path_pattern or match_path(path, allow.path_pattern)
@@ -35,15 +30,7 @@ def _matches_allow_rule(method: str, path: str, allow_rules: bool | list[AllowRu
     return False
 
 
-def _matches_block_rule(method: str, path: str, block_rules: bool | list[BlockRule]) -> BlockResponse | None:
-    if block_rules is True:
-        return BlockResponse(
-            status=403,
-            body={"error": "blocked", "reason": "domain is blocked by doubleagent policy"},
-        )
-    if block_rules is False:
-        return None
-
+def _matches_block_rule(method: str, path: str, block_rules: list[BlockRule]) -> BlockResponse | None:
     for block in block_rules:
         method_match = _method_matches(method, block.method)
         path_match = match_path(path, block.path_pattern)
@@ -65,6 +52,16 @@ def check_block(
         if not match_domain(hostname, rule.domains):
             continue
         matched_domain = True
+
+        if rule.policy == "allow":
+            return None
+
+        if rule.policy == "block":
+            matched_block = BlockResponse(
+                status=403,
+                body={"error": "blocked", "reason": "domain is blocked by doubleagent policy"},
+            )
+            continue
 
         if _matches_allow_rule(method, path, rule.allow):
             return None

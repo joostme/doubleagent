@@ -40,16 +40,19 @@ class PolicyTests(unittest.TestCase):
         )
         self.loaded = LoadedConfig(config=config, resolved_secrets=resolve_secrets(config))
 
-        bool_config = Config.model_validate(
+        policy_config = Config.model_validate(
             {
                 "rules": [
-                    {"domains": ["blocked.example.com"], "block": True},
-                    {"domains": ["allowed.example.com"], "allow": True},
+                    {"domains": ["blocked.example.com"], "policy": "block"},
+                    {"domains": ["allowed.example.com"], "policy": "allow"},
                 ],
                 "default_policy": "block",
             }
         )
-        self.bool_loaded = LoadedConfig(config=bool_config, resolved_secrets=resolve_secrets(bool_config))
+        self.policy_loaded = LoadedConfig(
+            config=policy_config,
+            resolved_secrets=resolve_secrets(policy_config),
+        )
 
     def test_block_rule(self) -> None:
         blocked = check_block(self.loaded, "api.example.com", "DELETE", "/admin/users/1")
@@ -73,19 +76,19 @@ class PolicyTests(unittest.TestCase):
         self.assertEqual(headers["authorization"], "Bearer real-secret")
         self.assertEqual(query["api_key"], "real-secret")
 
-    def test_block_true_blocks_domain_for_all_requests(self) -> None:
-        blocked = check_block(self.bool_loaded, "blocked.example.com", "GET", "/anything")
+    def test_policy_block_blocks_domain_for_all_requests(self) -> None:
+        blocked = check_block(self.policy_loaded, "blocked.example.com", "GET", "/anything")
         self.assertIsNotNone(blocked)
         assert blocked is not None
         self.assertEqual(blocked.status, 403)
         self.assertEqual(blocked.body["reason"], "domain is blocked by doubleagent policy")
 
-    def test_allow_true_allows_domain_under_default_block(self) -> None:
-        allowed = check_block(self.bool_loaded, "allowed.example.com", "PATCH", "/anything")
+    def test_policy_allow_allows_domain_under_default_block(self) -> None:
+        allowed = check_block(self.policy_loaded, "allowed.example.com", "PATCH", "/anything")
         self.assertIsNone(allowed)
 
     def test_default_block_still_blocks_unmatched_domain(self) -> None:
-        blocked = check_block(self.bool_loaded, "other.example.com", "GET", "/anything")
+        blocked = check_block(self.policy_loaded, "other.example.com", "GET", "/anything")
         self.assertIsNotNone(blocked)
 
 

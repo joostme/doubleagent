@@ -206,32 +206,34 @@
             "$ref": "#/$defs/SecretRule"
           }
         },
-        "block": {
+        "policy": {
           "anyOf": [
             {
-              "type": "boolean"
+              "type": "string",
+              "enum": [
+                "allow",
+                "block"
+              ]
             },
             {
-              "type": "array",
-              "items": {
-                "$ref": "#/$defs/BlockRule"
-              }
+              "type": "null"
             }
           ],
+          "default": null,
+          "title": "Policy"
+        },
+        "block": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/BlockRule"
+          },
           "title": "Block"
         },
         "allow": {
-          "anyOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "array",
-              "items": {
-                "$ref": "#/$defs/AllowRule"
-              }
-            }
-          ],
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/AllowRule"
+          },
           "title": "Allow"
         }
       },

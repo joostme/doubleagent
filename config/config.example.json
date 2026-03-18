@@ -49,7 +49,7 @@
     },
     {
       "domains": ["*.anthropic.com"],
-      "allow": true,
+      "policy": "allow",
       "secrets": [
         {
           "placeholder": "PLACEHOLDER_ANTHROPIC_KEY",
@@ -60,7 +60,7 @@
     },
     {
       "domains": ["telemetry.example.com"],
-      "block": true
+      "policy": "block"
     },
     {
       "domains": ["api.github.com"],

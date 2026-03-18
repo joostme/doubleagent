@@ -66,16 +66,30 @@ class AllowRule(StrictBaseModel):
     path_pattern: str | None = None
 
 
+def _validate_policy_value(value: str, field_name: str) -> str:
+    if value not in {"allow", "block"}:
+        raise ValueError(f"{field_name} must be allow or block")
+    return value
+
+
 class Rule(StrictBaseModel):
     domains: list[str] = Field(min_length=1)
     secrets: list[SecretRule] = Field(default_factory=list)
-    block: bool | list[BlockRule] = Field(default_factory=list)
-    allow: bool | list[AllowRule] = Field(default_factory=list)
+    policy: str | None = None
+    block: list[BlockRule] = Field(default_factory=list)
+    allow: list[AllowRule] = Field(default_factory=list)
+
+    @field_validator("policy")
+    @classmethod
+    def validate_policy(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        return _validate_policy_value(value, "policy")
 
     @model_validator(mode="after")
-    def validate_allow_block(self) -> Rule:
-        if self.allow is True and self.block is True:
-            raise ValueError("rule cannot set both allow and block to true")
+    def validate_rule(self) -> Rule:
+        if self.policy is not None and (self.allow or self.block):
+            raise ValueError("rule cannot set policy together with allow or block rules")
         return self
 
 
@@ -108,9 +122,7 @@ class Config(StrictBaseModel):
     @field_validator("default_policy")
     @classmethod
     def validate_default_policy(cls, value: str) -> str:
-        if value not in {"allow", "block"}:
-            raise ValueError("default_policy must be allow or block")
-        return value
+        return _validate_policy_value(value, "default_policy")
 
 
 @dataclass(frozen=True)

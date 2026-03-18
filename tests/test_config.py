@@ -70,23 +70,40 @@ class ConfigTests(unittest.TestCase):
         config = load_config(path)
         self.assertEqual(config.log_level, "warning")
 
-    def test_load_config_accepts_boolean_allow_and_block_rules(self) -> None:
+    def test_load_config_accepts_rule_policy(self) -> None:
         path = self._write_config(
-            '{"rules": [{"domains": ["allow.example.com"], "allow": true}, {"domains": ["block.example.com"], "block": true}]}'
+            '{"rules": [{"domains": ["allow.example.com"], "policy": "allow"}, {"domains": ["block.example.com"], "policy": "block"}]}'
         )
         config = load_config(path)
-        self.assertTrue(config.rules[0].allow)
-        self.assertTrue(config.rules[1].block)
+        self.assertEqual(config.rules[0].policy, "allow")
+        self.assertEqual(config.rules[1].policy, "block")
 
     def test_load_config_rejects_unknown_root_field(self) -> None:
         path = self._write_config('{"rules": [], "unexpected": true}')
         with self.assertRaises(ValidationError):
             load_config(path)
 
-    def test_rule_rejects_both_allow_and_block_true(self) -> None:
+    def test_rule_rejects_invalid_policy(self) -> None:
+        with self.assertRaises(ValidationError):
+            Config.model_validate({"rules": [{"domains": ["example.com"], "policy": "deny"}]})
+
+    def test_rule_rejects_policy_with_allow_or_block_rules(self) -> None:
         with self.assertRaises(ValidationError):
             Config.model_validate(
-                {"rules": [{"domains": ["example.com"], "allow": True, "block": True}]}
+                {
+                    "rules": [
+                        {
+                            "domains": ["example.com"],
+                            "policy": "allow",
+                            "block": [
+                                {
+                                    "path_pattern": "/admin/**",
+                                    "response": {"status": 403, "body": {"error": "blocked"}},
+                                }
+                            ],
+                        }
+                    ]
+                }
             )
 
     def test_secret_rejects_both_value_and_value_from_env(self) -> None:

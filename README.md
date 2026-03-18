@@ -159,7 +159,7 @@ Secrets can use `value` or `value_from_env`. If you need fixed text around the p
 
 Block rules match HTTP method and glob path pattern. Allow rules override block rules.
 
-Set `allow: true` to allow every request for matching domains, or `block: true` to block every request for matching domains.
+Set `policy: "allow"` to allow every request for matching domains, or `policy: "block"` to block every request for matching domains.
 
 `doubleagent` reloads the config file automatically when it changes. If a reload fails, it keeps serving the last valid configuration.
 
