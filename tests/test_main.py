@@ -47,6 +47,7 @@ def _configure_standard_mocks(
         log_level="info",
         default_policy="allow",
         rules=[],
+        forward_ports=[],
         ca=argparse.Namespace(cert_path="/tmp/ca.crt"),
         health_port=9000,
         http_port=8080,

@@ -5,6 +5,13 @@
     "cert_path": "/certs/ca.crt"
   },
   "http_port": 8080,
+  "forward_ports": [
+    {
+      "listen_port": 3000,
+      "target_host": "ai-agent",
+      "target_port": 3000
+    }
+  ],
   "rules": [
     {
       "domains": ["api.openai.com"],

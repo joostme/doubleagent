@@ -11,6 +11,7 @@ from pathlib import Path
 
 from doubleagent.ca import export_generated_ca, prepare_confdir
 from doubleagent.config import DEFAULT_CONFIG_PATH, Config, load_config, resolve_secrets
+from doubleagent.forward import ForwardTarget, PortForwarder
 from doubleagent.health import HealthServer
 from doubleagent.logging_utils import resolve_log_level
 
@@ -116,6 +117,17 @@ def _install_signal_handlers(
     signal.signal(signal.SIGTERM, _forward)
 
 
+def _build_forward_targets(config: Config) -> list[ForwardTarget]:
+    return [
+        ForwardTarget(
+            listen_port=fp.listen_port,
+            target_host=fp.target_host,
+            target_port=fp.target_port,
+        )
+        for fp in config.forward_ports
+    ]
+
+
 def main() -> int:
     args = parse_args()
     config = load_config(args.config)
@@ -133,6 +145,9 @@ def main() -> int:
     health_server = HealthServer(config.health_port, ready)
     health_server.start()
 
+    forward_targets = _build_forward_targets(config)
+    forwarder = PortForwarder(forward_targets, logger) if forward_targets else None
+
     env = build_proxy_environment(args.config)
     cmd = build_mitmdump_command(config.http_port, confdir)
     logger.info("starting mitmdump: %s", " ".join(cmd))
@@ -142,12 +157,17 @@ def main() -> int:
     try:
         _export_ca_or_stop(child, confdir, config.ca.cert_path, logger)
 
+        if forwarder:
+            forwarder.start()
+
         ready.set()
         _install_signal_handlers(child, logger)
 
         return child.wait()
     finally:
         ready.clear()
+        if forwarder:
+            forwarder.stop()
         health_server.stop()
 
 

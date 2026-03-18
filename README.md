@@ -9,6 +9,7 @@ A proxy sidecar for AI containers that enforces network policy through topology-
 - The AI only sees placeholder keys in its own environment.
 - `doubleagent` replaces placeholders in headers or query params with real secrets.
 - `doubleagent` can block requests by method and path.
+- `doubleagent` can forward TCP ports from the host to the agent, so you can access the agent's web UI without breaking network isolation.
 - Even if the agent ignores `HTTP_PROXY`, opens raw sockets, or unsets env vars, it cannot reach the internet — the network topology itself is the enforcement layer.
 
 ## Security model
@@ -163,3 +164,30 @@ Set `allow: true` to allow every request for matching domains, or `block: true` 
 `doubleagent` reloads the config file automatically when it changes. If a reload fails, it keeps serving the last valid configuration.
 
 `default_policy` is `allow` or `block`.
+
+## Port forwarding
+
+Since the AI agent is on an internal Docker network, it cannot publish ports to the host. To access agent services (e.g. a web UI), configure `doubleagent` to forward TCP ports:
+
+```json
+{
+  "forward_ports": [
+    {
+      "listen_port": 3000,
+      "target_host": "ai-agent",
+      "target_port": 3000
+    }
+  ]
+}
+```
+
+Then publish the port on the `doubleagent` container in your compose file:
+
+```yaml
+services:
+  doubleagent:
+    ports:
+      - "3000:3000"
+```
+
+Traffic flows: `host:3000 → doubleagent:3000 → ai-agent:3000` over the internal network. The agent remains fully isolated — this is a TCP relay, not an escape route.

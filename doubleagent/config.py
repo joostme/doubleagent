@@ -79,6 +79,12 @@ class Rule(StrictBaseModel):
         return self
 
 
+class ForwardPortRule(StrictBaseModel):
+    listen_port: int = Field(ge=1, le=65535)
+    target_host: str = Field(min_length=1)
+    target_port: int = Field(ge=1, le=65535)
+
+
 class CAConfig(StrictBaseModel):
     cert_path: str = "/certs/ca.crt"
 
@@ -87,6 +93,7 @@ class Config(StrictBaseModel):
     log_level: str = "info"
     ca: CAConfig = Field(default_factory=CAConfig)
     rules: list[Rule] = Field(default_factory=list)
+    forward_ports: list[ForwardPortRule] = Field(default_factory=list)
     default_policy: str = "allow"
     http_port: int = 8080
     health_port: int = 9000

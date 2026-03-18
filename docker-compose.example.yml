@@ -8,6 +8,12 @@
 #   - doubleagent is connected to BOTH agent_net and the default bridge,
 #     so it can receive requests from the AI and forward them to the internet.
 #
+# Accessing the AI agent's web UI:
+#   - Since the AI container is on an internal-only network, it cannot publish
+#     ports to the host. Instead, doubleagent acts as a reverse proxy: it
+#     publishes a port on the host and forwards traffic to the AI container
+#     over agent_net. Configure "forward_ports" in config.json to set this up.
+#
 # This makes enforcement mandatory at the network topology level rather than
 # relying on the AI container to cooperate via HTTP_PROXY conventions.
 
@@ -17,6 +23,11 @@ services:
     networks:
       - default
       - agent_net
+    ports:
+      # Forward port for the AI agent's web UI (configured in config.json
+      # via forward_ports). Doubleagent relays TCP traffic from the host to
+      # the agent over agent_net, since the agent cannot publish ports itself.
+      - "3000:3000"
     volumes:
       - certs:/certs
       - ./config.json:/config/config.json:ro
