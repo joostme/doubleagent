@@ -7,9 +7,9 @@ name = "doubleagent"
 version = "1.0.0"
 description = "Explicit proxy sidecar for AI containers"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.14"
 dependencies = [
-  "mitmproxy>=11,<12",
+  "mitmproxy>=12,<13",
   "pydantic>=2,<3",
 ]
 
