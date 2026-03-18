@@ -113,6 +113,7 @@ class CAConfig(StrictBaseModel):
 
 
 class Config(StrictBaseModel):
+    schema_url: str | None = Field(default=None, alias="$schema", exclude=True)
     log_level: str = "info"
     ca: CAConfig = Field(default_factory=CAConfig)
     rules: list[Rule] = Field(default_factory=list)
