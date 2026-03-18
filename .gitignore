@@ -7,3 +7,6 @@ __pycache__/
 .venv/
 .coverage
 temp
+node_modules/
+package-lock.json
+release-notes.md
