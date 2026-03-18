@@ -61,6 +61,9 @@ services:
         condition: service_healthy
     volumes:
       - certs:/certs:ro
+    # If the agent needs the CA in the system trust store, override the entrypoint.
+    # install-ca.sh is published into the certs volume automatically by doubleagent.
+    # entrypoint: ["/bin/sh", "-c", "/certs/install-ca.sh && exec your-original-entrypoint"]
     environment:
       - OPENAI_API_KEY=PLACEHOLDER_OPENAI_KEY
       - ANTHROPIC_API_KEY=PLACEHOLDER_ANTHROPIC_KEY

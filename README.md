@@ -1,55 +1,163 @@
-# doubleagent
+<h1 align="center">doubleagent</h1>
 
-`doubleagent` is a proxy sidecar for AI agent containers. It increases security by narrowing what the agent can call, keeps real secrets out of the agents container, and gives you granular control over domains, methods, paths, secret injection, and port forwarding.
+<p align="center">
+<strong>The security gateway for AI agents that don't need to be trusted.</strong>
+</p>
 
-The core idea: Put your AI agent in a closed network with no direct internet access, then make `doubleagent` act as a secure gateway.
+<p align="center">
+Your AI agent gets internet access. Your AI agent does <em>not</em> get your secrets.<br/>
+Drop <code>doubleagent</code> into any Docker Compose stack and lock things down in minutes.
+</p>
 
-## Features
+---
 
-- Keeps your agent off the public internet and sends outbound traffic through the `doubleagent` proxy.
-- Keeps real API keys out of your agents container by storing them on `doubleagent` and swapping in placeholders.
-- Lets you allow or block specific domains, endpoints, and request types.
-- Can expose ports through `doubleagent` without giving the agent direct internet access.
-- Gives you simple config for secrets, request rules, and default allow or block behavior.
+## The Problem
 
-## How it works
+You give your AI agent API keys for OpenAI, GitHub, Anthropic, and a dozen other services. It needs them to do its job. But that same agent also has **full, unrestricted internet access** and holds your **real credentials in plain text**.
+
+What happens when it hallucinates a `curl` to the wrong endpoint? What happens when a prompt injection tells it to exfiltrate your secrets? What happens when it decides to `DELETE /repos/*` on GitHub?
+
+**Nothing good.**
+
+## The Fix
+
+`doubleagent` sits between your AI agent and the internet. The agent lives in a sealed Docker network with **zero internet access**. Every outbound request must pass through `doubleagent`, where it gets inspected, filtered, and -- only if it passes your rules -- forwarded.
 
 ```text
-                 +----------------------+
-                 |      ai-agent        |
-                 |  internal only net   |
-                 +----------+-----------+
-                            |
-                            | agent_net (internal: true)
-                            |
-                 +----------v-----------+
-                 |     doubleagent      |
-                 |    rules + secrets   |
-                 +----------+-----------+
-                            |
-                            | default bridge
-                            |
-                 +----------v-----------+
-                 |       internet       |
-                 +----------------------+
+               +----------------------+
+               |      ai-agent        |
+               |  internal only net   |
+               +----------+-----------+
+                          |
+                          | agent_net (internal: true)
+                          |
+               +----------v-----------+
+               |     doubleagent      |
+               |    rules + secrets   |
+               +----------+-----------+
+                          |
+                          | default bridge
+                          |
+               +----------v-----------+
+               |       internet       |
+               +----------------------+
 ```
 
-This works because of the network setup, not just because of proxy environment variables. `ai-agent` only sits on `agent_net`, and that network is marked `internal: true`, so the agent has no direct route to the internet. `doubleagent` sits on both networks, which makes it the only way out. It can inspect requests, inject secrets, block calls, and forward the rest.
+This is not just a proxy your agent can opt out of. The Docker network topology is `internal: true` -- there is **no route to the internet** from the agent container. Even if the agent unsets `HTTP_PROXY`, opens raw sockets, or tries anything creative, packets have nowhere to go. `doubleagent` is the only way out.
 
-Even if the agent ignores `HTTP_PROXY` or tries to open its own connection, it still has no direct internet route from inside the Docker network.
+## Why doubleagent
 
-## Add it to an existing Compose stack
+### Real secrets never touch the agent
 
-The examples below assume you already have an `ai-agent` service in your `docker-compose.yml` and want to add `doubleagent` next to it.
+Your agent sees `PLACEHOLDER_OPENAI_KEY`. The real key lives only on `doubleagent`. When a request goes out, `doubleagent` swaps the placeholder for the real credential at the proxy level. If the agent is fully compromised, your secrets are still safe.
 
-### 1. Create `config.json`
+```yaml
+# The agent sees this:            # doubleagent holds this:
+OPENAI_API_KEY=PLACEHOLDER        OPENAI_API_KEY=sk-real-key-here
+```
 
-Start with `config/config.example.json` or use a small config like this:
+### Block dangerous operations, allow everything else
+
+Let the agent use the GitHub API freely -- but block `DELETE /repos/*/*` so it can never delete a repository. Allow OpenAI completions -- but block file deletion endpoints. Rules are per-domain, per-method, and per-path.
+
+```json
+{
+  "domains": ["api.github.com"],
+  "rules": [{ "policy": "block", "method": "DELETE", "path_pattern": "/repos/*/*" }]
+}
+```
+
+### Network-level enforcement, not convention
+
+Most proxy setups rely on the agent honoring `HTTP_PROXY` environment variables. `doubleagent` enforces isolation at the Docker network level. The agent container physically cannot reach the internet -- no matter what it tries.
+
+### Drop-in sidecar for any stack
+
+Already running an AI agent in Docker Compose? Add `doubleagent` in minutes. No agent code changes required. Just update your Compose file and create a `config.json`.
+
+### Hot-reload config
+
+Change your rules on the fly. `doubleagent` watches `config.json` and reloads automatically. If your new config is invalid, it keeps using the last working version.
+
+---
+
+## Quick Start
+
+There are three things to set up: the **network isolation**, the **proxy config**, and the **secret handoff**. The examples below assume you already have an `ai-agent` service in Docker Compose.
+
+### 1. Add `doubleagent` to your Compose file
+
+This is the core of the setup. You are adding `doubleagent` as a sidecar, creating an isolated network, and wiring your agent through it.
+
+```yaml
+services:
+  # Your existing AI agent -- now on an isolated network
+  ai-agent:
+    image: my-ai-agent:latest
+    networks:
+      - agent_net                              # internal only, no internet
+    depends_on:
+      doubleagent:
+        condition: service_healthy
+    volumes:
+      - certs:/certs:ro                        # trust the proxy CA + install-ca.sh
+    # If your agent needs the CA in the system trust store (see Troubleshooting):
+    # entrypoint: ["/bin/sh", "-c", "/certs/install-ca.sh && exec your-original-entrypoint"]
+    environment:
+      # Placeholders -- not real keys
+      - OPENAI_API_KEY=PLACEHOLDER_OPENAI_KEY
+      - GITHUB_TOKEN=PLACEHOLDER_GITHUB_TOKEN
+      # Route traffic through doubleagent
+      - HTTP_PROXY=http://doubleagent:8080
+      - HTTPS_PROXY=http://doubleagent:8080
+      - NO_PROXY=localhost,127.0.0.1,doubleagent
+      # Trust the proxy CA certificate
+      - NODE_EXTRA_CA_CERTS=/certs/ca.crt
+      - REQUESTS_CA_BUNDLE=/certs/ca.crt
+      - SSL_CERT_FILE=/certs/ca.crt
+      - CURL_CA_BUNDLE=/certs/ca.crt
+      - GIT_SSL_CAINFO=/certs/ca.crt
+
+  # The security gateway
+  doubleagent:
+    build: .
+    networks:
+      - default                                # has internet access
+      - agent_net                              # can talk to the agent
+    volumes:
+      - certs:/certs
+      - ./config.json:/config/config.json:ro
+    environment:
+      # Real secrets live here -- never in the agent
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:9000/healthz"]
+      interval: 5s
+      timeout: 3s
+      start_period: 10s
+      retries: 3
+
+networks:
+  agent_net:
+    driver: bridge
+    internal: true                             # no internet gateway
+
+volumes:
+  certs:
+```
+
+> **What just happened?** The agent is on `agent_net`, which is `internal: true` -- Docker creates no gateway, so there is no route to the internet. `doubleagent` sits on both networks, making it the only way out. Real secrets are only in the `doubleagent` environment; the agent only sees placeholders.
+
+### 2. Create `config.json`
+
+This tells `doubleagent` how to handle outbound traffic: which domains to allow, which to block, and where to inject real secrets.
+
+A minimal config to get started:
 
 ```json
 {
   "$schema": "./config/config.schema.json",
-  "http_port": 8080,
   "rules": [
     {
       "domains": ["api.openai.com"],
@@ -58,20 +166,6 @@ Start with `config/config.example.json` or use a small config like this:
           "placeholder": "PLACEHOLDER_OPENAI_KEY",
           "value_from_env": "OPENAI_API_KEY",
           "inject_in": ["header:Authorization"]
-        }
-      ],
-      "rules": [
-        {
-          "policy": "block",
-          "method": "DELETE",
-          "path_pattern": "/v1/files/**",
-          "response": {
-            "status": 403,
-            "body": {
-              "error": "blocked",
-              "reason": "file deletion is blocked by doubleagent policy"
-            }
-          }
         }
       ]
     },
@@ -90,133 +184,42 @@ Start with `config/config.example.json` or use a small config like this:
 }
 ```
 
-### 2. Update your Compose file
+That is enough to get running. Once you are comfortable, you can add fine-grained blocking rules -- see the [Config Reference](#config-reference) section below.
 
-If your current stack looks roughly like this:
-
-```yaml
-services:
-  ai-agent:
-    image: my-ai-agent:latest
-    environment:
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - GITHUB_TOKEN=${GITHUB_TOKEN}
-```
-
-add or change these lines:
-
-```diff
- services:
-   ai-agent:
-     image: my-ai-agent:latest
-+    networks:
-+      - agent_net
-+    depends_on:
-+      doubleagent:
-+        condition: service_healthy
-+    volumes:
-+      - certs:/certs:ro
-     environment:
--      - OPENAI_API_KEY=${OPENAI_API_KEY}
--      - GITHUB_TOKEN=${GITHUB_TOKEN}
-+      - OPENAI_API_KEY=PLACEHOLDER_OPENAI_KEY
-+      - GITHUB_TOKEN=PLACEHOLDER_GITHUB_TOKEN
-+      - HTTP_PROXY=http://doubleagent:8080
-+      - HTTPS_PROXY=http://doubleagent:8080
-+      - NO_PROXY=localhost,127.0.0.1,doubleagent,playwright-mcp
-+      - NODE_EXTRA_CA_CERTS=/certs/ca.crt
-+      - REQUESTS_CA_BUNDLE=/certs/ca.crt
-+      - SSL_CERT_FILE=/certs/ca.crt
-+      - CURL_CA_BUNDLE=/certs/ca.crt
-+      - GIT_SSL_CAINFO=/certs/ca.crt
-+      - PLAYWRIGHT_MCP_URL=http://playwright-mcp:8931
-+
-+  doubleagent:
-+    build: .
-+    networks:
-+      - default
-+      - agent_net
-+    volumes:
-+      - certs:/certs
-+      - ./config.json:/config/config.json:ro
-+    environment:
-+      - OPENAI_API_KEY=${OPENAI_API_KEY}
-+      - GITHUB_TOKEN=${GITHUB_TOKEN}
-+    healthcheck:
-+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:9000/healthz"]
-+      interval: 5s
-+      timeout: 3s
-+      start_period: 10s
-+      retries: 3
-+
-+  playwright-mcp:
-+    image: my-playwright-mcp:latest
-+    networks:
-+      - default
-+      - agent_net
-+    expose:
-+      - "8931"
-+
-+networks:
-+  agent_net:
-+    driver: bridge
-+    internal: true
-+
-+volumes:
-+  certs:
-```
-
-If you already have `networks:` or `volumes:` sections, merge these lines into the existing ones.
-
-### 3. Move your real secrets to `doubleagent`
-
-The main change is simple: the agents container stops seeing the real secrets.
-
-Before:
-
-```yaml
-services:
-  ai-agent:
-    environment:
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - GITHUB_TOKEN=${GITHUB_TOKEN}
-```
-
-After:
-
-```yaml
-services:
-  ai-agent:
-    environment:
-      - OPENAI_API_KEY=PLACEHOLDER_OPENAI_KEY
-      - GITHUB_TOKEN=PLACEHOLDER_GITHUB_TOKEN
-
-  doubleagent:
-    environment:
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - GITHUB_TOKEN=${GITHUB_TOKEN}
-```
-
-`doubleagent` then replaces those placeholders in outbound requests based on your `config.json`.
-
-### 4. Adding a MCP server
-
-The `playwright-mcp` example joins both networks:
-
-- `agent_net`, so `ai-agent` can reach it as `http://playwright-mcp:8931`
-- `default`, so the MCP server itself can still access the internet
-
-This means the agent can talk to the MCP server over the internal Docker network, while the MCP server itself can still use the internet. The `NO_PROXY` entry makes sure local traffic to `playwright-mcp` stays inside Docker instead of being sent through `doubleagent`.
-
-### 5. Start the stack
+### 3. Start the stack
 
 ```bash
 docker compose up
 ```
 
-`doubleagent` exposes `GET /healthz` and `GET /readyz` on port `9000` by default.
+`doubleagent` exposes `GET /healthz` and `GET /readyz` on port `9000` by default. Once healthy, all agent traffic flows through the proxy.
 
-## Config
+### Optional: Adding MCP servers
+
+If your agent uses MCP servers (like Playwright), they need to join both networks so the agent can reach them over `agent_net` while the MCP server itself retains internet access:
+
+```yaml
+services:
+  playwright-mcp:
+    image: my-playwright-mcp:latest
+    networks:
+      - default          # internet access for browser automation
+      - agent_net        # reachable by ai-agent
+    expose:
+      - "8931"
+```
+
+Add the MCP host to `NO_PROXY` on the agent so local traffic stays inside Docker:
+
+```yaml
+- NO_PROXY=localhost,127.0.0.1,doubleagent,playwright-mcp
+```
+
+See `docker-compose.example.yml` and `config/config.example.json` for a complete working stack.
+
+---
+
+## Config Reference
 
 `doubleagent` reads `config.json`. When the file changes, it reloads it automatically. If the new file is invalid, it keeps using the last working config.
 
@@ -230,12 +233,14 @@ If you want editor autocomplete and validation, add this near the top of your co
 
 ### Main config fields
 
-- `rules`: where you define domains, secrets, and request rules.
-- `default_policy`: what happens when no rule matches. Use `allow` or `block`.
-- `http_port`: the proxy port. Default: `8080`.
-- `health_port`: the health endpoint port. Default: `9000`.
-- `forward_ports`: ports that `doubleagent` should expose and forward to the agent.
-- `ca.cert_path`: where the generated CA certificate is written.
+| Field | Description | Default |
+|---|---|---|
+| `rules` | Domain rules, secrets, and request policies | -- |
+| `default_policy` | What happens when no rule matches: `allow` or `block` | -- |
+| `http_port` | The proxy port | `8080` |
+| `health_port` | The health endpoint port | `9000` |
+| `forward_ports` | Ports that `doubleagent` should expose and forward to the agent | -- |
+| `ca.cert_path` | Where the generated CA certificate is written | -- |
 
 ### Common rule examples
 
@@ -354,7 +359,7 @@ If your client sends `Authorization: Bearer PLACEHOLDER_OPENAI_KEY`, `doubleagen
 
 This is useful when you want to block most of a domain but still allow one small safe endpoint.
 
-### A few matching rules
+### Matching rules
 
 - Use exact domains like `api.openai.com`.
 - Use `*.example.com` if you want to match subdomains like `api.example.com`.
@@ -365,7 +370,7 @@ This is useful when you want to block most of a domain but still allow one small
 
 If you have overlapping domain rules, put the more specific one first.
 
-## Port forwarding
+## Port Forwarding
 
 Because `ai-agent` is on an internal-only network, it should not publish its own ports directly to the host. If you still want to reach something like the agent web UI, let `doubleagent` publish the port and forward it to the agent.
 
@@ -398,7 +403,7 @@ Traffic flows like this:
 host:3000 -> doubleagent:3000 -> ai-agent:3000
 ```
 
-This gives you access to the agent UI without moving the agents container onto an internet-capable network.
+This gives you access to the agent UI without moving the agent's container onto an internet-capable network.
 
 ## Limits
 
@@ -409,6 +414,50 @@ It helps protect real secrets and blocks direct outbound requests. But if the ag
 `playwright-mcp` is one example. If the agent can use it, the agent may still be able to leak information through that MCP server.
 
 So `doubleagent` is best seen as a strong safety layer, not a 100 percent security boundary.
+
+## Troubleshooting
+
+### TLS / certificate errors from the agent
+
+`doubleagent` intercepts HTTPS traffic using a generated CA certificate. The agent container needs to trust this CA. If you see errors like:
+
+```
+SSL: CERTIFICATE_VERIFY_FAILED
+unable to get local issuer certificate
+self-signed certificate in certificate chain
+```
+
+the agent's runtime is not picking up the CA cert.
+
+**Step 1: Check the env vars.** The Compose example sets `NODE_EXTRA_CA_CERTS`, `REQUESTS_CA_BUNDLE`, `SSL_CERT_FILE`, `CURL_CA_BUNDLE`, and `GIT_SSL_CAINFO`. These cover Node.js, Python `requests`, OpenSSL-based tools, curl, and git. Verify these are set and pointing to `/certs/ca.crt`.
+
+**Step 2: Install the CA into the system trust store.** Some runtimes and tools ignore the env vars and only check the OS trust store. In that case, you need to run a CA install step before the agent starts.
+
+The `doubleagent` image automatically publishes `install-ca.sh` into the shared `certs` volume on startup. This script auto-detects the OS (Debian, Ubuntu, Alpine, RHEL, Fedora, CentOS, Amazon Linux, SUSE) and installs the cert into the right location. It also handles Java keystores if `keytool` is available.
+
+Since your agent container already mounts the `certs` volume, the script is available at `/certs/install-ca.sh` with no extra setup. Just override the agent's entrypoint to run it first:
+
+```yaml
+services:
+  ai-agent:
+    volumes:
+      - certs:/certs:ro
+    entrypoint: ["/bin/sh", "-c", "/certs/install-ca.sh && exec your-original-entrypoint"]
+```
+
+Replace `your-original-entrypoint` with whatever the agent image normally runs (check with `docker inspect <image>` if unsure).
+
+### Agent can still reach the internet
+
+If the agent bypasses the proxy, double-check that:
+
+- The `agent_net` network has `internal: true` set.
+- The agent service is **only** on `agent_net` (not also on `default`).
+- There are no other networks attached to the agent that have a gateway.
+
+### Config changes are not taking effect
+
+`doubleagent` hot-reloads `config.json` on file change. If a reload fails (invalid JSON, schema violation), it keeps the last working config and logs a warning. Check the `doubleagent` container logs for reload errors.
 
 ## Development
 
