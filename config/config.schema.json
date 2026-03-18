@@ -90,11 +90,51 @@
         "target_port"
       ]
     },
-    "AllowRule": {
-      "title": "AllowRule",
+    "RequestRule": {
+      "title": "RequestRule",
       "type": "object",
       "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "policy": {
+                "const": "block"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "response"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "policy": {
+                "const": "allow"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "response": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ],
       "properties": {
+        "policy": {
+          "type": "string",
+          "enum": [
+            "allow",
+            "block"
+          ],
+          "title": "Policy"
+        },
         "method": {
           "anyOf": [
             {
@@ -118,8 +158,23 @@
           ],
           "default": null,
           "title": "Path Pattern"
+        },
+        "response": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BlockResponse"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Response"
         }
-      }
+      },
+      "required": [
+        "policy"
+      ]
     },
     "BlockResponse": {
       "title": "BlockResponse",
@@ -141,37 +196,6 @@
       "required": [
         "status",
         "body"
-      ]
-    },
-    "BlockRule": {
-      "title": "BlockRule",
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "method": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Method"
-        },
-        "path_pattern": {
-          "type": "string",
-          "minLength": 1,
-          "title": "Path Pattern"
-        },
-        "response": {
-          "$ref": "#/$defs/BlockResponse"
-        }
-      },
-      "required": [
-        "path_pattern",
-        "response"
       ]
     },
     "CAConfig": {
@@ -222,19 +246,12 @@
           "default": null,
           "title": "Policy"
         },
-        "block": {
+        "rules": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/BlockRule"
+            "$ref": "#/$defs/RequestRule"
           },
-          "title": "Block"
-        },
-        "allow": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/AllowRule"
-          },
-          "title": "Allow"
+          "title": "Rules"
         }
       },
       "required": [

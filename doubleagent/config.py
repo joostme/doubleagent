@@ -55,15 +55,31 @@ class SecretRule(StrictBaseModel):
         return value
 
 
-class BlockRule(StrictBaseModel):
-    method: str | None = None
-    path_pattern: str = Field(min_length=1)
-    response: BlockResponse
-
-
-class AllowRule(StrictBaseModel):
+class RequestRule(StrictBaseModel):
+    policy: str
     method: str | None = None
     path_pattern: str | None = None
+    response: BlockResponse | None = None
+
+    @field_validator("policy")
+    @classmethod
+    def validate_policy(cls, value: str) -> str:
+        return _validate_policy_value(value, "policy")
+
+    @field_validator("path_pattern")
+    @classmethod
+    def validate_path_pattern(cls, value: str | None) -> str | None:
+        if value == "":
+            raise ValueError("path_pattern must not be empty")
+        return value
+
+    @model_validator(mode="after")
+    def validate_rule(self) -> RequestRule:
+        if self.policy == "block" and self.response is None:
+            raise ValueError("block request rules must define response")
+        if self.policy == "allow" and self.response is not None:
+            raise ValueError("allow request rules cannot define response")
+        return self
 
 
 def _validate_policy_value(value: str, field_name: str) -> str:
@@ -76,8 +92,7 @@ class Rule(StrictBaseModel):
     domains: list[str] = Field(min_length=1)
     secrets: list[SecretRule] = Field(default_factory=list)
     policy: str | None = None
-    block: list[BlockRule] = Field(default_factory=list)
-    allow: list[AllowRule] = Field(default_factory=list)
+    rules: list[RequestRule] = Field(default_factory=list)
 
     @field_validator("policy")
     @classmethod
@@ -85,12 +100,6 @@ class Rule(StrictBaseModel):
         if value is None:
             return value
         return _validate_policy_value(value, "policy")
-
-    @model_validator(mode="after")
-    def validate_rule(self) -> Rule:
-        if self.policy is not None and (self.allow or self.block):
-            raise ValueError("rule cannot set policy together with allow or block rules")
-        return self
 
 
 class ForwardPortRule(StrictBaseModel):

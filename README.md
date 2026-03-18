@@ -52,8 +52,9 @@ Start from `config/config.example.json` and trim it down for your use case, or c
           "inject_in": ["header:Authorization"]
         }
       ],
-      "block": [
+      "rules": [
         {
+          "policy": "block",
           "method": "DELETE",
           "path_pattern": "/v1/files/*",
           "response": {
@@ -157,7 +158,7 @@ Secret injection supports:
 
 Secrets can use `value` or `value_from_env`. If you need fixed text around the placeholder, include it in the original value, for example `Bearer PLACEHOLDER_OPENAI_KEY`.
 
-Block rules match HTTP method and glob path pattern. Allow rules override block rules.
+Request `rules` match HTTP method and glob path pattern. Matching `policy: "allow"` rules override matching `policy: "block"` rules for the same domain.
 
 Set `policy: "allow"` to allow every request for matching domains, or `policy: "block"` to block every request for matching domains.
 

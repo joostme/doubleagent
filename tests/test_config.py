@@ -78,6 +78,14 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(config.rules[0].policy, "allow")
         self.assertEqual(config.rules[1].policy, "block")
 
+    def test_load_config_accepts_nested_request_rules(self) -> None:
+        path = self._write_config(
+            '{"rules": [{"domains": ["api.example.com"], "rules": [{"policy": "block", "method": "DELETE", "path_pattern": "/admin/**", "response": {"status": 403, "body": {"error": "blocked"}}}, {"policy": "allow", "method": "DELETE", "path_pattern": "/admin/safe"}]}]}'
+        )
+        config = load_config(path)
+        self.assertEqual(config.rules[0].rules[0].policy, "block")
+        self.assertEqual(config.rules[0].rules[1].policy, "allow")
+
     def test_load_config_rejects_unknown_root_field(self) -> None:
         path = self._write_config('{"rules": [], "unexpected": true}')
         with self.assertRaises(ValidationError):
@@ -87,18 +95,36 @@ class ConfigTests(unittest.TestCase):
         with self.assertRaises(ValidationError):
             Config.model_validate({"rules": [{"domains": ["example.com"], "policy": "deny"}]})
 
-    def test_rule_rejects_policy_with_allow_or_block_rules(self) -> None:
+    def test_request_rule_rejects_block_without_response(self) -> None:
         with self.assertRaises(ValidationError):
             Config.model_validate(
                 {
                     "rules": [
                         {
                             "domains": ["example.com"],
-                            "policy": "allow",
-                            "block": [
+                            "rules": [
                                 {
+                                    "policy": "block",
                                     "path_pattern": "/admin/**",
-                                    "response": {"status": 403, "body": {"error": "blocked"}},
+                                }
+                            ],
+                        }
+                    ]
+                }
+            )
+
+    def test_request_rule_rejects_allow_with_response(self) -> None:
+        with self.assertRaises(ValidationError):
+            Config.model_validate(
+                {
+                    "rules": [
+                        {
+                            "domains": ["example.com"],
+                            "rules": [
+                                {
+                                    "policy": "allow",
+                                    "path_pattern": "/admin/safe",
+                                    "response": {"status": 200, "body": {"ok": True}},
                                 }
                             ],
                         }

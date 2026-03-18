@@ -86,18 +86,18 @@ class MitmproxyIntegrationTests(unittest.TestCase):
                           "inject_in": ["header:Authorization", "query:api_key"]
                         }}
                       ],
-                      "block": [
+                      "rules": [
                         {{
+                          "policy": "block",
                           "method": "DELETE",
                           "path_pattern": "/admin/**",
                           "response": {{
                             "status": 403,
                             "body": {{"error": "blocked", "reason": "not allowed"}}
                           }}
-                        }}
-                      ],
-                      "allow": [
+                        }},
                         {{
+                          "policy": "allow",
                           "method": "DELETE",
                           "path_pattern": "/admin/safe"
                         }}

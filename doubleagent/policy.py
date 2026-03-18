@@ -3,10 +3,9 @@ from __future__ import annotations
 from collections.abc import MutableMapping
 
 from doubleagent.config import (
-    AllowRule,
     BlockResponse,
-    BlockRule,
     LoadedConfig,
+    RequestRule,
     ResolvedSecret,
     match_domain,
     match_path,
@@ -21,22 +20,10 @@ def _method_matches(request_method: str, rule_method: str | None) -> bool:
     return rule_method is None or rule_method.upper() == request_method.upper()
 
 
-def _matches_allow_rule(method: str, path: str, allow_rules: list[AllowRule]) -> bool:
-    for allow in allow_rules:
-        method_match = _method_matches(method, allow.method)
-        path_match = not allow.path_pattern or match_path(path, allow.path_pattern)
-        if method_match and path_match:
-            return True
-    return False
-
-
-def _matches_block_rule(method: str, path: str, block_rules: list[BlockRule]) -> BlockResponse | None:
-    for block in block_rules:
-        method_match = _method_matches(method, block.method)
-        path_match = match_path(path, block.path_pattern)
-        if method_match and path_match:
-            return block.response
-    return None
+def _match_request_rule(method: str, path: str, request_rule: RequestRule) -> bool:
+    method_match = _method_matches(method, request_rule.method)
+    path_match = not request_rule.path_pattern or match_path(path, request_rule.path_pattern)
+    return method_match and path_match
 
 
 def check_block(
@@ -46,32 +33,32 @@ def check_block(
     path: str,
 ) -> BlockResponse | None:
     matched_domain = False
-    matched_block: BlockResponse | None = None
 
     for rule in loaded.config.rules:
         if not match_domain(hostname, rule.domains):
             continue
         matched_domain = True
 
+        matched_request_block: BlockResponse | None = None
+        for request_rule in rule.rules:
+            if not _match_request_rule(method, path, request_rule):
+                continue
+            if request_rule.policy == "allow":
+                return None
+            if request_rule.response is not None:
+                matched_request_block = request_rule.response
+
+        if matched_request_block is not None:
+            return matched_request_block
+
         if rule.policy == "allow":
             return None
 
         if rule.policy == "block":
-            matched_block = BlockResponse(
+            return BlockResponse(
                 status=403,
                 body={"error": "blocked", "reason": "domain is blocked by doubleagent policy"},
             )
-            continue
-
-        if _matches_allow_rule(method, path, rule.allow):
-            return None
-
-        block = _matches_block_rule(method, path, rule.block)
-        if block is not None:
-            matched_block = block
-
-    if matched_block:
-        return matched_block
 
     if loaded.config.default_policy == "block":
         reason = (

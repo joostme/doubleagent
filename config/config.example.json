@@ -22,8 +22,9 @@
           "inject_in": ["header:Authorization"]
         }
       ],
-      "block": [
+      "rules": [
         {
+          "policy": "block",
           "method": "DELETE",
           "path_pattern": "/v1/files/*",
           "response": {
@@ -35,6 +36,7 @@
           }
         },
         {
+          "policy": "block",
           "method": "DELETE",
           "path_pattern": "/v1/assistants/*",
           "response": {
@@ -71,8 +73,9 @@
           "inject_in": ["header:Authorization"]
         }
       ],
-      "block": [
+      "rules": [
         {
+          "policy": "block",
           "method": "DELETE",
           "path_pattern": "/repos/*/*",
           "response": {
@@ -84,6 +87,7 @@
           }
         },
         {
+          "policy": "block",
           "method": "PUT",
           "path_pattern": "/repos/*/transfer",
           "response": {

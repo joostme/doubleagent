@@ -22,17 +22,22 @@ class PolicyTests(unittest.TestCase):
                                 "inject_in": ["header:authorization", "query:api_key"],
                             }
                         ],
-                        "block": [
+                        "rules": [
                             {
+                                "policy": "block",
                                 "method": "DELETE",
                                 "path_pattern": "/admin/**",
                                 "response": {
                                     "status": 403,
                                     "body": {"error": "blocked"},
                                 },
-                            }
+                            },
+                            {
+                                "policy": "allow",
+                                "method": "DELETE",
+                                "path_pattern": "/admin/safe",
+                            },
                         ],
-                        "allow": [{"method": "DELETE", "path_pattern": "/admin/safe"}],
                     }
                 ],
                 "default_policy": "allow",
@@ -63,6 +68,29 @@ class PolicyTests(unittest.TestCase):
     def test_allow_overrides_block(self) -> None:
         allowed = check_block(self.loaded, "api.example.com", "DELETE", "/admin/safe")
         self.assertIsNone(allowed)
+
+    def test_domain_policy_applies_after_request_rules(self) -> None:
+        config = Config.model_validate(
+            {
+                "rules": [
+                    {
+                        "domains": ["api.example.com"],
+                        "policy": "block",
+                        "rules": [
+                            {
+                                "policy": "allow",
+                                "method": "GET",
+                                "path_pattern": "/healthz",
+                            }
+                        ],
+                    }
+                ]
+            }
+        )
+        loaded = LoadedConfig(config=config, resolved_secrets=resolve_secrets(config))
+
+        self.assertIsNone(check_block(loaded, "api.example.com", "GET", "/healthz"))
+        self.assertIsNotNone(check_block(loaded, "api.example.com", "GET", "/other"))
 
     def test_secret_injection(self) -> None:
         headers = {"authorization": "Bearer PLACEHOLDER_KEY"}
