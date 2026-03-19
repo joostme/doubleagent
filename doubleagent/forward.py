@@ -37,7 +37,7 @@ def _build_socat_command(
         "socat",
     ]
     if log_level == "debug":
-        command.append("-dddd")
+        command.append("-dd")
     elif log_level == "error":
         command.append("-d0")
 
