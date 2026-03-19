@@ -210,7 +210,7 @@ services:
 Add the MCP host to `NO_PROXY` on the agent so local traffic stays inside Docker:
 
 ```yaml
-- NO_PROXY=localhost,127.0.0.1,doubleagent,playwright-mcp
+- NO_PROXY=localhost,127.0.0.1,playwright-mcp
 ```
 
 See `docker-compose.example.yml` and `config/config.example.json` for a complete working stack.
