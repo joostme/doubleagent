@@ -211,6 +211,143 @@ class ConfigTests(unittest.TestCase):
                 }
             )
 
+    def test_secret_rejects_both_value_and_value_from_file(self) -> None:
+        with self.assertRaises(ValidationError):
+            Config.model_validate(
+                {
+                    "rules": [
+                        {
+                            "domains": ["x.com"],
+                            "secrets": [
+                                {
+                                    "placeholder": "PH",
+                                    "value": "inline-secret",
+                                    "value_from_file": "/run/secrets/key",
+                                    "inject_in": ["header:Authorization"],
+                                }
+                            ],
+                        }
+                    ]
+                }
+            )
+
+    def test_secret_rejects_both_value_from_env_and_value_from_file(self) -> None:
+        with self.assertRaises(ValidationError):
+            Config.model_validate(
+                {
+                    "rules": [
+                        {
+                            "domains": ["x.com"],
+                            "secrets": [
+                                {
+                                    "placeholder": "PH",
+                                    "value_from_env": "SOME_VAR",
+                                    "value_from_file": "/run/secrets/key",
+                                    "inject_in": ["header:Authorization"],
+                                }
+                            ],
+                        }
+                    ]
+                }
+            )
+
+    def test_secret_rejects_all_three_sources(self) -> None:
+        with self.assertRaises(ValidationError):
+            Config.model_validate(
+                {
+                    "rules": [
+                        {
+                            "domains": ["x.com"],
+                            "secrets": [
+                                {
+                                    "placeholder": "PH",
+                                    "value": "inline",
+                                    "value_from_env": "SOME_VAR",
+                                    "value_from_file": "/run/secrets/key",
+                                    "inject_in": ["header:Authorization"],
+                                }
+                            ],
+                        }
+                    ]
+                }
+            )
+
+    def test_resolve_secrets_from_file(self) -> None:
+        secret_dir = tempfile.TemporaryDirectory(prefix="doubleagent-secrets-")
+        self.addCleanup(secret_dir.cleanup)
+        secret_path = Path(secret_dir.name) / "my_secret"
+        secret_path.write_text("file-secret-value\n", encoding="utf-8")
+
+        path = self._write_config(
+            '{"rules": [{"domains": ["x.com"], "secrets": [{"placeholder": "PH", "value_from_file": "'
+            + str(secret_path)
+            + '", "inject_in": ["header:Authorization"]}]}]}'
+        )
+        config = load_config(path)
+        resolved = resolve_secrets(config)
+        self.assertEqual(resolved[0][0].resolved_value, "file-secret-value")
+
+    def test_resolve_secrets_from_file_strips_whitespace(self) -> None:
+        secret_dir = tempfile.TemporaryDirectory(prefix="doubleagent-secrets-")
+        self.addCleanup(secret_dir.cleanup)
+        secret_path = Path(secret_dir.name) / "my_secret"
+        secret_path.write_text("  secret-with-spaces  \n", encoding="utf-8")
+
+        path = self._write_config(
+            '{"rules": [{"domains": ["x.com"], "secrets": [{"placeholder": "PH", "value_from_file": "'
+            + str(secret_path)
+            + '", "inject_in": ["header:Authorization"]}]}]}'
+        )
+        config = load_config(path)
+        resolved = resolve_secrets(config)
+        self.assertEqual(resolved[0][0].resolved_value, "secret-with-spaces")
+
+    def test_resolve_secrets_from_file_missing_file(self) -> None:
+        path = self._write_config(
+            '{"rules": [{"domains": ["x.com"], "secrets": [{"placeholder": "PH", "value_from_file": "/nonexistent/path/secret", "inject_in": ["header:Authorization"]}]}]}'
+        )
+        config = load_config(path)
+        with self.assertRaises(RuntimeError) as ctx:
+            resolve_secrets(config)
+        self.assertIn("does not exist", str(ctx.exception))
+
+    def test_resolve_secrets_from_file_empty_file(self) -> None:
+        secret_dir = tempfile.TemporaryDirectory(prefix="doubleagent-secrets-")
+        self.addCleanup(secret_dir.cleanup)
+        secret_path = Path(secret_dir.name) / "empty_secret"
+        secret_path.write_text("", encoding="utf-8")
+
+        path = self._write_config(
+            '{"rules": [{"domains": ["x.com"], "secrets": [{"placeholder": "PH", "value_from_file": "'
+            + str(secret_path)
+            + '", "inject_in": ["header:Authorization"]}]}]}'
+        )
+        config = load_config(path)
+        with self.assertRaises(RuntimeError) as ctx:
+            resolve_secrets(config)
+        self.assertIn("is empty", str(ctx.exception))
+
+    def test_secret_accepts_value_from_file_only(self) -> None:
+        config = Config.model_validate(
+            {
+                "rules": [
+                    {
+                        "domains": ["x.com"],
+                        "secrets": [
+                            {
+                                "placeholder": "PH",
+                                "value_from_file": "/run/secrets/key",
+                                "inject_in": ["header:Authorization"],
+                            }
+                        ],
+                    }
+                ]
+            }
+        )
+        self.assertEqual(config.rules[0].secrets[0].value_from_file, "/run/secrets/key")
+        self.assertIsNone(config.rules[0].secrets[0].value)
+        self.assertIsNone(config.rules[0].secrets[0].value_from_env)
+
 
 if __name__ == "__main__":
     unittest.main()

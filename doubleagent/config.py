@@ -39,12 +39,16 @@ class SecretRule(StrictBaseModel):
     placeholder: str = Field(min_length=1)
     value: str | None = None
     value_from_env: str | None = None
+    value_from_file: str | None = None
     inject_in: list[str] = Field(min_length=1)
 
     @model_validator(mode="after")
     def validate_secret_source(self) -> SecretRule:
-        if self.value is not None and self.value_from_env is not None:
-            raise ValueError("secret must set either 'value' or 'value_from_env', not both")
+        sources = [s for s in (self.value, self.value_from_env, self.value_from_file) if s is not None]
+        if len(sources) > 1:
+            raise ValueError(
+                "secret must set only one of 'value', 'value_from_env', or 'value_from_file'"
+            )
         return self
 
     @field_validator("inject_in")
@@ -165,13 +169,26 @@ def load_config(path: str | os.PathLike[str]) -> Config:
 
 
 def _resolve_secret_value(secret: SecretRule, rule_index: int) -> str:
-    if secret.value_from_env is None:
-        return secret.value or ""
+    if secret.value_from_file is not None:
+        file_path = Path(secret.value_from_file)
+        if not file_path.is_file():
+            raise RuntimeError(
+                f'rule {rule_index}: secret file "{secret.value_from_file}" does not exist'
+            )
+        value = file_path.read_text(encoding="utf-8").strip()
+        if not value:
+            raise RuntimeError(
+                f'rule {rule_index}: secret file "{secret.value_from_file}" is empty'
+            )
+        return value
 
-    value = os.environ.get(secret.value_from_env, "")
-    if not value:
-        raise RuntimeError(f'rule {rule_index}: env var "{secret.value_from_env}" is not set')
-    return value
+    if secret.value_from_env is not None:
+        value = os.environ.get(secret.value_from_env, "")
+        if not value:
+            raise RuntimeError(f'rule {rule_index}: env var "{secret.value_from_env}" is not set')
+        return value
+
+    return secret.value or ""
 
 
 def resolve_secrets(config: Config) -> dict[int, list[ResolvedSecret]]:

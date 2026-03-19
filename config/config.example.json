@@ -73,7 +73,7 @@
       "secrets": [
         {
           "placeholder": "PLACEHOLDER_GITHUB_TOKEN",
-          "value_from_env": "GITHUB_TOKEN",
+          "value_from_file": "/run/secrets/github_token",
           "inject_in": ["header:Authorization"]
         }
       ],
