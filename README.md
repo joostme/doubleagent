@@ -1,6 +1,10 @@
 <h1 align="center">doubleagent</h1>
 
 <p align="center">
+  <img src="./doubleagent-logo.svg" width="160" alt="doubleagent logo" />
+</p>
+
+<p align="center">
 <strong>The security gateway for AI agents that don't need to be trusted.</strong>
 </p>
 

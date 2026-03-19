@@ -1,0 +1,28 @@
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="logoTitle logoDesc">
+  <title id="logoTitle">doubleagent logo</title>
+  <desc id="logoDesc">A minimal shield logo with a hidden-agent silhouette, orange glasses, and an orange tie accent.</desc>
+  <defs>
+    <linearGradient id="outerShield" x1="70" y1="24" x2="190" y2="222" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1E293B"/>
+      <stop offset="0.45" stop-color="#0F172A"/>
+      <stop offset="1" stop-color="#111827"/>
+    </linearGradient>
+    <linearGradient id="innerShield" x1="82" y1="42" x2="174" y2="198" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFDF8"/>
+      <stop offset="1" stop-color="#F4E8D6"/>
+    </linearGradient>
+  </defs>
+  <path d="M128 20L199 43V100C199 152 171 198 128 221C85 198 57 152 57 100V43L128 20Z" fill="url(#outerShield)"/>
+  <path d="M128 38L180 55V100C180 141 158 178 128 198C98 178 76 141 76 100V55L128 38Z" fill="url(#innerShield)"/>
+  <path d="M128 38L180 55V69C161 61 144 57 128 57C112 57 95 61 76 69V55L128 38Z" fill="#FFFFFF" opacity="0.28"/>
+  <path d="M91 56C100 49 112 43 128 38" stroke="#FFFFFF" stroke-width="5" stroke-linecap="round" opacity="0.18"/>
+  <path d="M171 63C171 108 165 153 143 192" stroke="#0B1220" stroke-width="5" stroke-linecap="round" opacity="0.12"/>
+  <path d="M96 74C96 63.5066 104.507 55 115 55H141C151.493 55 160 63.5066 160 74V84H96V74Z" fill="#0F172A"/>
+  <path d="M81 92C81 86.4772 85.4772 82 91 82H165C170.523 82 175 86.4772 175 92C175 98.6274 169.627 104 163 104H93C86.3726 104 81 98.6274 81 92Z" fill="#0F172A"/>
+  <rect x="103" y="78" width="50" height="8" rx="4" fill="#F97316"/>
+  <rect x="91" y="110" width="32" height="18" rx="6" fill="#F97316"/>
+  <rect x="133" y="110" width="32" height="18" rx="6" fill="#F97316"/>
+  <rect x="121" y="116" width="14" height="6" rx="3" fill="#0F172A"/>
+  <path d="M92 154L128 132L164 154L146 194L128 176L110 194L92 154Z" fill="#0F172A"/>
+  <path d="M128 147L138 160L128 189L118 160L128 147Z" fill="#F97316"/>
+</svg>
