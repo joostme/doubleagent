@@ -72,11 +72,12 @@ class ConfigTests(unittest.TestCase):
 
     def test_load_config_accepts_rule_policy(self) -> None:
         path = self._write_config(
-            '{"rules": [{"domains": ["allow.example.com"], "policy": "allow"}, {"domains": ["block.example.com"], "policy": "block"}]}'
+            '{"rules": [{"domains": ["allow.example.com"], "policy": "allow"}, {"domains": ["block.example.com"], "policy": "block"}, {"domains": ["pinned.example.com"], "policy": "bypass"}]}'
         )
         config = load_config(path)
         self.assertEqual(config.rules[0].policy, "allow")
         self.assertEqual(config.rules[1].policy, "block")
+        self.assertEqual(config.rules[2].policy, "bypass")
 
     def test_load_config_accepts_nested_request_rules(self) -> None:
         path = self._write_config(
@@ -125,6 +126,64 @@ class ConfigTests(unittest.TestCase):
                                     "policy": "allow",
                                     "path_pattern": "/admin/safe",
                                     "response": {"status": 200, "body": {"ok": True}},
+                                }
+                            ],
+                        }
+                    ]
+                }
+            )
+
+    def test_request_rule_rejects_bypass_policy(self) -> None:
+        with self.assertRaises(ValidationError):
+            Config.model_validate(
+                {
+                    "rules": [
+                        {
+                            "domains": ["example.com"],
+                            "rules": [
+                                {
+                                    "policy": "bypass",
+                                    "path_pattern": "/admin/safe",
+                                }
+                            ],
+                        }
+                    ]
+                }
+            )
+
+    def test_bypass_rule_rejects_secrets(self) -> None:
+        with self.assertRaises(ValidationError):
+            Config.model_validate(
+                {
+                    "rules": [
+                        {
+                            "domains": ["example.com"],
+                            "policy": "bypass",
+                            "secrets": [
+                                {
+                                    "placeholder": "PH",
+                                    "value": "secret",
+                                    "inject_in": ["header:Authorization"],
+                                }
+                            ],
+                        }
+                    ]
+                }
+            )
+
+    def test_bypass_rule_rejects_nested_request_rules(self) -> None:
+        with self.assertRaises(ValidationError):
+            Config.model_validate(
+                {
+                    "rules": [
+                        {
+                            "domains": ["example.com"],
+                            "policy": "bypass",
+                            "rules": [
+                                {
+                                    "policy": "block",
+                                    "path_pattern": "/admin/**",
+                                    "response": {"status": 403, "body": {"error": "blocked"}},
                                 }
                             ],
                         }

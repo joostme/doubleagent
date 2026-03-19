@@ -64,7 +64,7 @@ class RequestRule(StrictBaseModel):
     @field_validator("policy")
     @classmethod
     def validate_policy(cls, value: str) -> str:
-        return _validate_policy_value(value, "policy")
+        return _validate_policy_value(value, "policy", {"allow", "block"})
 
     @field_validator("path_pattern")
     @classmethod
@@ -82,9 +82,10 @@ class RequestRule(StrictBaseModel):
         return self
 
 
-def _validate_policy_value(value: str, field_name: str) -> str:
-    if value not in {"allow", "block"}:
-        raise ValueError(f"{field_name} must be allow or block")
+def _validate_policy_value(value: str, field_name: str, valid_values: set[str]) -> str:
+    if value not in valid_values:
+        choices = ", ".join(sorted(valid_values))
+        raise ValueError(f"{field_name} must be one of {choices}")
     return value
 
 
@@ -99,7 +100,17 @@ class Rule(StrictBaseModel):
     def validate_policy(cls, value: str | None) -> str | None:
         if value is None:
             return value
-        return _validate_policy_value(value, "policy")
+        return _validate_policy_value(value, "policy", {"allow", "block", "bypass"})
+
+    @model_validator(mode="after")
+    def validate_bypass_rule(self) -> Rule:
+        if self.policy != "bypass":
+            return self
+        if self.secrets:
+            raise ValueError("bypass domain rules cannot define secrets")
+        if self.rules:
+            raise ValueError("bypass domain rules cannot define nested request rules")
+        return self
 
 
 class ForwardPortRule(StrictBaseModel):
@@ -132,7 +143,7 @@ class Config(StrictBaseModel):
     @field_validator("default_policy")
     @classmethod
     def validate_default_policy(cls, value: str) -> str:
-        return _validate_policy_value(value, "default_policy")
+        return _validate_policy_value(value, "default_policy", {"allow", "block"})
 
 
 @dataclass(frozen=True)

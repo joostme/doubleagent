@@ -212,6 +212,19 @@
     },
     "Rule": {
       "title": "Rule",
+      "description": "A domain rule. Use AllowBlockRule for inspected traffic with secret injection or request filtering, or BypassRule to tunnel a certificate-pinned domain without MITM.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/AllowBlockRule"
+        },
+        {
+          "$ref": "#/$defs/BypassRule"
+        }
+      ]
+    },
+    "AllowBlockRule": {
+      "title": "AllowBlockRule",
+      "description": "A normal inspected domain rule. Traffic may be allowed or blocked, secrets may be injected, and nested request rules may match method and path.",
       "type": "object",
       "additionalProperties": false,
       "properties": {
@@ -219,6 +232,7 @@
           "type": "array",
           "minItems": 1,
           "title": "Domains",
+          "description": "Exact hostnames or wildcard subdomain patterns such as *.example.com.",
           "items": {
             "type": "string"
           }
@@ -226,6 +240,7 @@
         "secrets": {
           "type": "array",
           "title": "Secrets",
+          "description": "Secrets to inject into matching requests after TLS interception.",
           "items": {
             "$ref": "#/$defs/SecretRule"
           }
@@ -244,18 +259,46 @@
             }
           ],
           "default": null,
-          "title": "Policy"
+          "title": "Policy",
+          "description": "Optional domain-level policy for inspected traffic. If omitted, request sub-rules still apply and unmatched traffic falls back to default_policy."
         },
         "rules": {
           "type": "array",
           "items": {
             "$ref": "#/$defs/RequestRule"
           },
-          "title": "Rules"
+          "title": "Rules",
+          "description": "Optional request-level rules that match HTTP method and path after TLS interception."
         }
       },
       "required": [
         "domains"
+      ]
+    },
+    "BypassRule": {
+      "title": "BypassRule",
+      "description": "A passthrough domain rule. Traffic is tunneled without TLS interception, so secret injection and request-level rules are unavailable.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "domains": {
+          "type": "array",
+          "minItems": 1,
+          "title": "Domains",
+          "description": "Exact hostnames or wildcard subdomain patterns to tunnel without MITM.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "policy": {
+          "const": "bypass",
+          "title": "Policy",
+          "description": "Tunnel matching TLS connections without interception."
+        }
+      },
+      "required": [
+        "domains",
+        "policy"
       ]
     },
     "SecretRule": {
