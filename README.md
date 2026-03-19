@@ -114,7 +114,7 @@ services:
       # Route traffic through doubleagent
       - HTTP_PROXY=http://doubleagent:8080
       - HTTPS_PROXY=http://doubleagent:8080
-      - NO_PROXY=localhost,127.0.0.1,doubleagent
+      - NO_PROXY=localhost,127.0.0.1
 
   # The security gateway
   doubleagent:
