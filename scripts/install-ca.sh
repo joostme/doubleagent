@@ -1,11 +1,17 @@
 #!/bin/sh
-# install-ca.sh — Install the doubleagent CA certificate into the system trust store.
+# install-ca.sh — Install the doubleagent CA certificate into the system trust
+# store AND set runtime-specific environment variables (NODE_EXTRA_CA_CERTS,
+# REQUESTS_CA_BUNDLE, SSL_CERT_FILE, CURL_CA_BUNDLE, GIT_SSL_CAINFO).
 #
 # Supports: Debian/Ubuntu, Alpine, RHEL/Fedora/CentOS, Amazon Linux, SUSE.
 # Run this in the AI container's entrypoint before any network calls.
 #
+# The env vars are exported in the current shell (inherited by `exec`),
+# written to /etc/environment, and to /etc/profile.d/doubleagent-ca.sh so
+# they are available even when the process runs as a non-root user.
+#
 # Usage:
-#   /scripts/install-ca.sh [path-to-ca.crt]
+#   /certs/install-ca.sh [path-to-ca.crt]
 #
 # If no path is given, defaults to /certs/ca.crt.
 
@@ -14,9 +20,8 @@ set -e
 CA_CERT="${1:-/certs/ca.crt}"
 
 if [ ! -f "$CA_CERT" ]; then
-    echo "doubleagent: CA cert not found at $CA_CERT — skipping trust store install."
-    echo "doubleagent: The proxy may still work if runtime-specific env vars are set"
-    echo "doubleagent: (NODE_EXTRA_CA_CERTS, REQUESTS_CA_BUNDLE, SSL_CERT_FILE)."
+    echo "doubleagent: CA cert not found at $CA_CERT — skipping install."
+    echo "doubleagent: Neither the trust store nor certificate env vars will be configured."
     exit 0
 fi
 
@@ -61,7 +66,7 @@ else
     else
         echo "doubleagent: WARNING — could not find update-ca-certificates or update-ca-trust."
         echo "doubleagent: The CA cert has been copied but may not be trusted by all tools."
-        echo "doubleagent: Set NODE_EXTRA_CA_CERTS, REQUESTS_CA_BUNDLE, SSL_CERT_FILE manually."
+        echo "doubleagent: The certificate env vars below will still be set."
     fi
 fi
 
@@ -75,4 +80,63 @@ if command -v keytool >/dev/null 2>&1 && [ -n "$JAVA_HOME" ]; then
     fi
 fi
 
+# ---------------------------------------------------------------------------
+# Set runtime-specific environment variables so tools that don't use the
+# system trust store still pick up the CA cert (Node.js, Python requests,
+# curl, git, generic OpenSSL).
+#
+# Three mechanisms are used so this works regardless of how the container
+# starts the main process:
+#
+#   1. `export` in the current shell — inherited by `exec` in the same
+#      entrypoint chain (covers the common case).
+#   2. /etc/environment — read by PAM-based logins and some container
+#      runtimes. Works for non-root users.
+#   3. /etc/profile.d/doubleagent-ca.sh — sourced by login shells (bash,
+#      sh, ash, zsh). Works when the process drops to another user.
+#
+# We only set a variable if it is not already set, so user overrides in
+# the Compose environment section still take precedence.
+# ---------------------------------------------------------------------------
+
+mkdir -p /etc/profile.d
+
+# Build the profile.d script from scratch (overwrite) so repeated
+# container restarts never produce duplicate lines.
+_DA_PROFILE="/etc/profile.d/doubleagent-ca.sh"
+: > "$_DA_PROFILE"
+
+# Strip any of our five variables from /etc/environment so we can
+# re-append them cleanly. We don't need comment markers — the variable
+# names themselves are the identifier. Using a temp file avoids the
+# printf-on-empty-string pitfall that would inject a blank line.
+_DA_VARS='^\(NODE_EXTRA_CA_CERTS\|REQUESTS_CA_BUNDLE\|SSL_CERT_FILE\|CURL_CA_BUNDLE\|GIT_SSL_CAINFO\)='
+if [ -f /etc/environment ]; then
+    grep -v "$_DA_VARS" /etc/environment > /etc/environment.tmp || true
+    mv /etc/environment.tmp /etc/environment
+fi
+
+_da_set_var() {
+    _name="$1"
+    _value="$2"
+    eval "_current=\${$_name:-}"
+    if [ -z "$_current" ]; then
+        export "$_name=$_value"
+        echo "$_name=$_value" >> /etc/environment
+        echo "export $_name=$_value" >> "$_DA_PROFILE"
+    else
+        echo "doubleagent: $_name already set — skipping"
+    fi
+}
+
+_da_set_var NODE_EXTRA_CA_CERTS "$CA_CERT"
+_da_set_var REQUESTS_CA_BUNDLE  "$CA_CERT"
+_da_set_var SSL_CERT_FILE       "$CA_CERT"
+_da_set_var CURL_CA_BUNDLE      "$CA_CERT"
+_da_set_var GIT_SSL_CAINFO      "$CA_CERT"
+
+chmod 644 /etc/environment
+chmod 644 "$_DA_PROFILE"
+
+echo "doubleagent: certificate environment variables configured"
 echo "doubleagent: CA trust store updated successfully"

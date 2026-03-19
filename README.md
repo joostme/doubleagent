@@ -102,7 +102,7 @@ services:
     volumes:
       - certs:/certs:ro                        # trust the proxy CA + install-ca.sh
     # If your agent needs the CA in the system trust store (see Troubleshooting):
-    # entrypoint: ["/bin/sh", "-c", "/certs/install-ca.sh && exec your-original-entrypoint"]
+    # entrypoint: ["/bin/sh", "-c", ". /certs/install-ca.sh && exec your-original-entrypoint"]
     environment:
       # Placeholders -- not real keys
       - OPENAI_API_KEY=PLACEHOLDER_OPENAI_KEY
@@ -111,12 +111,6 @@ services:
       - HTTP_PROXY=http://doubleagent:8080
       - HTTPS_PROXY=http://doubleagent:8080
       - NO_PROXY=localhost,127.0.0.1,doubleagent
-      # Trust the proxy CA certificate
-      - NODE_EXTRA_CA_CERTS=/certs/ca.crt
-      - REQUESTS_CA_BUNDLE=/certs/ca.crt
-      - SSL_CERT_FILE=/certs/ca.crt
-      - CURL_CA_BUNDLE=/certs/ca.crt
-      - GIT_SSL_CAINFO=/certs/ca.crt
 
   # The security gateway
   doubleagent:
@@ -429,23 +423,19 @@ self-signed certificate in certificate chain
 
 the agent's runtime is not picking up the CA cert.
 
-**Step 1: Check the env vars.** The Compose example sets `NODE_EXTRA_CA_CERTS`, `REQUESTS_CA_BUNDLE`, `SSL_CERT_FILE`, `CURL_CA_BUNDLE`, and `GIT_SSL_CAINFO`. These cover Node.js, Python `requests`, OpenSSL-based tools, curl, and git. Verify these are set and pointing to `/certs/ca.crt`.
+**Step 1: Run `install-ca.sh`.** The `doubleagent` image automatically publishes `install-ca.sh` into the shared `certs` volume. This script installs the CA into the OS trust store AND sets the runtime-specific env vars (`NODE_EXTRA_CA_CERTS`, `REQUESTS_CA_BUNDLE`, `SSL_CERT_FILE`, `CURL_CA_BUNDLE`, `GIT_SSL_CAINFO`) — so you don't need to add them to your Compose file. The vars are persisted to `/etc/environment` and `/etc/profile.d/` so they work even when the process runs as a non-root user.
 
-**Step 2: Install the CA into the system trust store.** Some runtimes and tools ignore the env vars and only check the OS trust store. In that case, you need to run a CA install step before the agent starts.
-
-The `doubleagent` image automatically publishes `install-ca.sh` into the shared `certs` volume on startup. This script auto-detects the OS (Debian, Ubuntu, Alpine, RHEL, Fedora, CentOS, Amazon Linux, SUSE) and installs the cert into the right location. It also handles Java keystores if `keytool` is available.
-
-Since your agent container already mounts the `certs` volume, the script is available at `/certs/install-ca.sh` with no extra setup. Just override the agent's entrypoint to run it first:
+Source the script in your entrypoint (note the `.` — required so exports are inherited by `exec`):
 
 ```yaml
 services:
   ai-agent:
     volumes:
       - certs:/certs:ro
-    entrypoint: ["/bin/sh", "-c", "/certs/install-ca.sh && exec your-original-entrypoint"]
+    entrypoint: ["/bin/sh", "-c", ". /certs/install-ca.sh && exec your-original-entrypoint"]
 ```
 
-Replace `your-original-entrypoint` with whatever the agent image normally runs (check with `docker inspect <image>` if unsure).
+Replace `your-original-entrypoint` with whatever the agent image normally runs (check with `docker inspect <image>` if unsure). If a variable is already set in your Compose `environment`, `install-ca.sh` will not overwrite it.
 
 ### Agent can still reach the internet
 

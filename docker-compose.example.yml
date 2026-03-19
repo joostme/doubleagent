@@ -63,7 +63,11 @@ services:
       - certs:/certs:ro
     # If the agent needs the CA in the system trust store, override the entrypoint.
     # install-ca.sh is published into the certs volume automatically by doubleagent.
-    # entrypoint: ["/bin/sh", "-c", "/certs/install-ca.sh && exec your-original-entrypoint"]
+    # It installs the CA into the OS trust store AND sets certificate env vars
+    # (NODE_EXTRA_CA_CERTS, REQUESTS_CA_BUNDLE, SSL_CERT_FILE, etc.) so you
+    # don't need to list them here. The vars are also persisted to
+    # /etc/environment and /etc/profile.d/ for non-root processes.
+    # entrypoint: ["/bin/sh", "-c", ". /certs/install-ca.sh && exec your-original-entrypoint"]
     environment:
       - OPENAI_API_KEY=PLACEHOLDER_OPENAI_KEY
       - ANTHROPIC_API_KEY=PLACEHOLDER_ANTHROPIC_KEY
@@ -73,11 +77,6 @@ services:
       - HTTP_PROXY=http://doubleagent:8080
       - HTTPS_PROXY=http://doubleagent:8080
       - NO_PROXY=localhost,127.0.0.1,doubleagent,playwright-mcp
-      - NODE_EXTRA_CA_CERTS=/certs/ca.crt
-      - REQUESTS_CA_BUNDLE=/certs/ca.crt
-      - SSL_CERT_FILE=/certs/ca.crt
-      - CURL_CA_BUNDLE=/certs/ca.crt
-      - GIT_SSL_CAINFO=/certs/ca.crt
       # Example local MCP endpoint reachable by the AI over agent_net.
       - PLAYWRIGHT_MCP_URL=http://playwright-mcp:8931
 
