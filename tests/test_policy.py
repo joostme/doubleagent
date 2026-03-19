@@ -4,7 +4,7 @@ import logging
 import unittest
 
 from doubleagent.config import Config, LoadedConfig, resolve_secrets
-from doubleagent.policy import check_block, inject_request_secrets
+from doubleagent.policy import check_block, inject_request_secrets, resolve_policy
 
 
 class PolicyTests(unittest.TestCase):
@@ -50,6 +50,7 @@ class PolicyTests(unittest.TestCase):
                 "rules": [
                     {"domains": ["blocked.example.com"], "policy": "block"},
                     {"domains": ["allowed.example.com"], "policy": "allow"},
+                    {"domains": ["pinned.example.com"], "policy": "bypass"},
                 ],
                 "default_policy": "block",
             }
@@ -114,6 +115,11 @@ class PolicyTests(unittest.TestCase):
     def test_policy_allow_allows_domain_under_default_block(self) -> None:
         allowed = check_block(self.policy_loaded, "allowed.example.com", "PATCH", "/anything")
         self.assertIsNone(allowed)
+
+    def test_policy_bypass_resolves_distinctly(self) -> None:
+        decision = resolve_policy(self.policy_loaded, "pinned.example.com", "GET", "/anything")
+        self.assertEqual(decision.policy, "bypass")
+        self.assertIsNone(decision.block_response)
 
     def test_default_block_still_blocks_unmatched_domain(self) -> None:
         blocked = check_block(self.policy_loaded, "other.example.com", "GET", "/anything")

@@ -65,6 +65,10 @@
       "policy": "block"
     },
     {
+      "domains": ["pinned.example.com"],
+      "policy": "bypass"
+    },
+    {
       "domains": ["api.github.com"],
       "secrets": [
         {

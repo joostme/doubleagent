@@ -21,6 +21,11 @@ class ProxyRuntimeTests(unittest.TestCase):
         self.assertIn("termlog_verbosity=debug", command)
         self.assertIn("flow_detail=1", command)
 
+    def test_build_mitmdump_command_relies_on_addon_for_bypass(self) -> None:
+        command = build_mitmdump_command(8080, "/tmp/confdir", "info")
+
+        self.assertNotIn("ignore_hosts", " ".join(command))
+
 
 if __name__ == "__main__":
     unittest.main()

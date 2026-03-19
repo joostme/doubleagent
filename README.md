@@ -269,6 +269,21 @@ If you want editor autocomplete and validation, add this near the top of your co
 }
 ```
 
+#### Bypass MITM for a certificate-pinned domain
+
+```json
+{
+  "rules": [
+    {
+      "domains": ["pinned.example.com"],
+      "policy": "bypass"
+    }
+  ]
+}
+```
+
+This tunnels traffic through `doubleagent` without TLS interception. Use it for domains that fail behind MITM because they use certificate pinning.
+
 #### Inject a secret into a header
 
 ```json
@@ -365,6 +380,7 @@ This is useful when you want to block most of a domain but still allow one small
 - In `path_pattern`, `*` matches one path part and `**` can span across `/`.
 - `inject_in` supports `header:Name` and `query:param`.
 - For a secret, use either `value` or `value_from_env`.
+- `bypass` is only valid for whole-domain rules. Bypassed domains cannot use nested request rules or secret injection because HTTPS traffic is tunneled without inspection.
 
 If you have overlapping domain rules, put the more specific one first.
 
