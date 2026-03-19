@@ -31,7 +31,7 @@ class TestBuildSocatCommand(unittest.TestCase):
         cmd = _build_socat_command(target, log_level="debug")
         self.assertEqual(cmd, [
             "socat",
-            "-dddd",
+            "-dd",
             "TCP-LISTEN:3000,bind=0.0.0.0,reuseaddr,fork",
             "TCP:ai-agent:8080",
         ])
@@ -103,7 +103,7 @@ class TestPortForwarderLifecycle(unittest.TestCase):
 
         mock_popen.assert_called_once_with([
             "socat",
-            "-dddd",
+            "-dd",
             "TCP-LISTEN:3000,bind=0.0.0.0,reuseaddr,fork",
             "TCP:ai-agent:3000",
         ])
