@@ -379,14 +379,14 @@ This is useful when you want to block most of a domain but still allow one small
 - `*.example.com` does not match the bare `example.com`.
 - In `path_pattern`, `*` matches one path part and `**` can span across `/`.
 - `inject_in` supports `header:Name` and `query:param`.
-- For a secret, use either `value` or `value_from_env`.
+- For a secret, use either `value`, `value_from_env` or `value_from_file`.
 - `bypass` is only valid for whole-domain rules. Bypassed domains cannot use nested request rules or secret injection because HTTPS traffic is tunneled without inspection.
 
 If you have overlapping domain rules, put the more specific one first.
 
 ## Port Forwarding
 
-Because `ai-agent` is on an internal-only network, it should not publish its own ports directly to the host. If you still want to reach something like the agent web UI, let `doubleagent` publish the port and forward it to the agent.
+Because `ai-agent` is on an internal-only network, it can not publish its own ports directly to the host. If you still want to reach something like the agent web UI, let `doubleagent` publish the port and forward it to the agent.
 
 In `config.json`:
 
@@ -427,7 +427,7 @@ It helps protect real secrets and blocks direct outbound requests. But if the ag
 
 `playwright-mcp` is one example. If the agent can use it, the agent may still be able to leak information through that MCP server.
 
-So `doubleagent` is best seen as a strong safety layer, not a 100 percent security boundary.
+So `doubleagent` is best seen as a strong safety layer, not a 100 percent secure security boundary.
 
 ## Troubleshooting
 
