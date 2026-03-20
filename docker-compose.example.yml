@@ -43,7 +43,8 @@ services:
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - GITHUB_TOKEN=${GITHUB_TOKEN}
+    secrets:
+      - github_token
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:9000/healthz"]
       interval: 5s
@@ -104,3 +105,10 @@ networks:
 
 volumes:
   certs:
+
+# Docker secrets — files are mounted read-only at /run/secrets/<name> inside
+# the container. Use "value_from_file" in config.json to read them.
+# See https://docs.docker.com/compose/how-tos/use-secrets/
+secrets:
+  github_token:
+    environment: GITHUB_TOKEN

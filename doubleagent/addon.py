@@ -5,7 +5,7 @@ import logging
 import os
 
 from mitmproxy import http
-from mitmproxy.proxy.layers.tls import ClientHelloData
+from mitmproxy.tls import ClientHelloData
 
 from doubleagent.config import BlockResponse, ConfigStore, DEFAULT_CONFIG_PATH
 from doubleagent.logging_utils import set_logger_level
@@ -64,6 +64,7 @@ class DoubleAgentAddon:
         decision = resolve_policy(loaded, host, method, path)
         if decision.block_response is not None:
             block = decision.block_response
+            LOGGER.info("blocked %s %s%s", method, host, path)
             flow.response = self._build_block_response(block)
             return
 

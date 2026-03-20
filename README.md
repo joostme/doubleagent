@@ -1,7 +1,7 @@
 <h1 align="center">doubleagent</h1>
 
 <p align="center">
-  <img src="./doubleagent-logo.svg" width="160" alt="doubleagent logo" />
+  <img src="./docs/doubleagent-logo.svg" width="160" alt="doubleagent logo" />
 </p>
 
 <p align="center">
@@ -27,25 +27,9 @@ What happens when it hallucinates a `curl` to the wrong endpoint? What happens w
 
 `doubleagent` sits between your AI agent and the internet. The agent lives in a sealed Docker network with **zero internet access**. Every outbound request must pass through `doubleagent`, where it gets inspected, filtered, and -- only if it passes your rules -- forwarded.
 
-```text
-               +----------------------+
-               |      ai-agent        |
-               |  internal only net   |
-               +----------+-----------+
-                          |
-                          | agent_net (internal: true)
-                          |
-               +----------v-----------+
-               |     doubleagent      |
-               |    rules + secrets   |
-               +----------+-----------+
-                          |
-                          | default bridge
-                          |
-               +----------v-----------+
-               |       internet       |
-               +----------------------+
-```
+<p align="center">
+  <img src="./docs/flow.svg" alt="doubleagent flow diagram" />
+</p>
 
 This is not just a proxy your agent can opt out of. The Docker network topology is `internal: true` -- there is **no route to the internet** from the agent container. Even if the agent unsets `HTTP_PROXY`, opens raw sockets, or tries anything creative, packets have nowhere to go. `doubleagent` is the only way out.
 
@@ -119,6 +103,7 @@ services:
       - NODE_USE_ENV_PROXY=1
       # Node.js can also trust certs installed into the OS trust store
       - NODE_USE_SYSTEM_CA=1
+      - NO_PROXY=localhost,127.0.0.1
 
   # The security gateway
   doubleagent:
@@ -214,7 +199,7 @@ services:
 Add the MCP host to `NO_PROXY` on the agent so local traffic stays inside Docker:
 
 ```yaml
-- NO_PROXY=localhost,127.0.0.1,doubleagent,playwright-mcp
+- NO_PROXY=localhost,127.0.0.1,playwright-mcp
 ```
 
 See `docker-compose.example.yml` and `config/config.example.json` for a complete working stack.
@@ -383,14 +368,14 @@ This is useful when you want to block most of a domain but still allow one small
 - `*.example.com` does not match the bare `example.com`.
 - In `path_pattern`, `*` matches one path part and `**` can span across `/`.
 - `inject_in` supports `header:Name` and `query:param`.
-- For a secret, use either `value` or `value_from_env`.
+- For a secret, use either `value`, `value_from_env` or `value_from_file`.
 - `bypass` is only valid for whole-domain rules. Bypassed domains cannot use nested request rules or secret injection because HTTPS traffic is tunneled without inspection.
 
 If you have overlapping domain rules, put the more specific one first.
 
 ## Port Forwarding
 
-Because `ai-agent` is on an internal-only network, it should not publish its own ports directly to the host. If you still want to reach something like the agent web UI, let `doubleagent` publish the port and forward it to the agent.
+Because `ai-agent` is on an internal-only network, it can not publish its own ports directly to the host. If you still want to reach something like the agent web UI, let `doubleagent` publish the port and forward it to the agent.
 
 In `config.json`:
 
@@ -431,7 +416,7 @@ It helps protect real secrets and blocks direct outbound requests. But if the ag
 
 `playwright-mcp` is one example. If the agent can use it, the agent may still be able to leak information through that MCP server.
 
-So `doubleagent` is best seen as a strong safety layer, not a 100 percent security boundary.
+So `doubleagent` is best seen as a strong safety layer, not a 100 percent secure security boundary.
 
 ## Troubleshooting
 

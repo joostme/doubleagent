@@ -335,6 +335,19 @@
           "default": null,
           "title": "Value From Env"
         },
+        "value_from_file": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Value From File",
+          "description": "Path to a file containing the secret value. Useful with Docker secrets, which are mounted at /run/secrets/<name>."
+        },
         "inject_in": {
           "type": "array",
           "minItems": 1,
