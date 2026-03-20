@@ -115,6 +115,10 @@ services:
       - HTTP_PROXY=http://doubleagent:8080
       - HTTPS_PROXY=http://doubleagent:8080
       - NO_PROXY=localhost,127.0.0.1,doubleagent
+      # Node.js built-in HTTP clients need this to honor the proxy env vars
+      - NODE_USE_ENV_PROXY=1
+      # Node.js can also trust certs installed into the OS trust store
+      - NODE_USE_SYSTEM_CA=1
 
   # The security gateway
   doubleagent:

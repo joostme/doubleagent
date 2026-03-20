@@ -1,7 +1,8 @@
 #!/bin/sh
 # install-ca.sh — Install the doubleagent CA certificate into the system trust
-# store AND set runtime-specific environment variables (NODE_EXTRA_CA_CERTS,
-# REQUESTS_CA_BUNDLE, SSL_CERT_FILE, CURL_CA_BUNDLE, GIT_SSL_CAINFO).
+# store AND set runtime-specific environment variables (NODE_USE_ENV_PROXY,
+# NODE_USE_SYSTEM_CA, NODE_EXTRA_CA_CERTS, REQUESTS_CA_BUNDLE,
+# SSL_CERT_FILE, CURL_CA_BUNDLE, GIT_SSL_CAINFO).
 #
 # Supports: Debian/Ubuntu, Alpine, RHEL/Fedora/CentOS, Amazon Linux, SUSE.
 # Run this in the AI container's entrypoint before any network calls.
@@ -83,7 +84,9 @@ fi
 # ---------------------------------------------------------------------------
 # Set runtime-specific environment variables so tools that don't use the
 # system trust store still pick up the CA cert (Node.js, Python requests,
-# curl, git, generic OpenSSL).
+# curl, git, generic OpenSSL). For Node.js we also enable env-proxy support
+# so the built-in HTTP client honors HTTP_PROXY / HTTPS_PROXY / NO_PROXY,
+# and system-CA support so Node can use the OS trust store we just updated.
 #
 # Three mechanisms are used so this works regardless of how the container
 # starts the main process:
@@ -106,11 +109,11 @@ mkdir -p /etc/profile.d
 _DA_PROFILE="/etc/profile.d/doubleagent-ca.sh"
 : > "$_DA_PROFILE"
 
-# Strip any of our five variables from /etc/environment so we can
+# Strip any of our seven variables from /etc/environment so we can
 # re-append them cleanly. We don't need comment markers — the variable
 # names themselves are the identifier. Using a temp file avoids the
 # printf-on-empty-string pitfall that would inject a blank line.
-_DA_VARS='^\(NODE_EXTRA_CA_CERTS\|REQUESTS_CA_BUNDLE\|SSL_CERT_FILE\|CURL_CA_BUNDLE\|GIT_SSL_CAINFO\)='
+_DA_VARS='^\(NODE_USE_ENV_PROXY\|NODE_USE_SYSTEM_CA\|NODE_EXTRA_CA_CERTS\|REQUESTS_CA_BUNDLE\|SSL_CERT_FILE\|CURL_CA_BUNDLE\|GIT_SSL_CAINFO\)='
 if [ -f /etc/environment ]; then
     grep -v "$_DA_VARS" /etc/environment > /etc/environment.tmp || true
     mv /etc/environment.tmp /etc/environment
@@ -129,6 +132,8 @@ _da_set_var() {
     fi
 }
 
+_da_set_var NODE_USE_ENV_PROXY 1
+_da_set_var NODE_USE_SYSTEM_CA 1
 _da_set_var NODE_EXTRA_CA_CERTS "$CA_CERT"
 _da_set_var REQUESTS_CA_BUNDLE  "$CA_CERT"
 _da_set_var SSL_CERT_FILE       "$CA_CERT"
