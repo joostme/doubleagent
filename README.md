@@ -1,7 +1,7 @@
 <h1 align="center">doubleagent</h1>
 
 <p align="center">
-  <img src="./doubleagent-logo.svg" width="160" alt="doubleagent logo" />
+  <img src="./docs/doubleagent-logo.svg" width="160" alt="doubleagent logo" />
 </p>
 
 <p align="center">
@@ -27,25 +27,9 @@ What happens when it hallucinates a `curl` to the wrong endpoint? What happens w
 
 `doubleagent` sits between your AI agent and the internet. The agent lives in a sealed Docker network with **zero internet access**. Every outbound request must pass through `doubleagent`, where it gets inspected, filtered, and -- only if it passes your rules -- forwarded.
 
-```text
-               +----------------------+
-               |      ai-agent        |
-               |  internal only net   |
-               +----------+-----------+
-                          |
-                          | agent_net (internal: true)
-                          |
-               +----------v-----------+
-               |     doubleagent      |
-               |    rules + secrets   |
-               +----------+-----------+
-                          |
-                          | default bridge
-                          |
-               +----------v-----------+
-               |       internet       |
-               +----------------------+
-```
+<p align="center">
+  <img src="./docs/flow.svg" alt="doubleagent flow diagram" />
+</p>
 
 This is not just a proxy your agent can opt out of. The Docker network topology is `internal: true` -- there is **no route to the internet** from the agent container. Even if the agent unsets `HTTP_PROXY`, opens raw sockets, or tries anything creative, packets have nowhere to go. `doubleagent` is the only way out.
 
