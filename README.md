@@ -115,6 +115,10 @@ services:
       - HTTP_PROXY=http://doubleagent:8080
       - HTTPS_PROXY=http://doubleagent:8080
       - NO_PROXY=localhost,127.0.0.1,doubleagent
+      # Node.js built-in HTTP clients need this to honor the proxy env vars
+      - NODE_USE_ENV_PROXY=1
+      # Node.js can also trust certs installed into the OS trust store
+      - NODE_USE_SYSTEM_CA=1
 
   # The security gateway
   doubleagent:
@@ -443,7 +447,7 @@ self-signed certificate in certificate chain
 
 the agent's runtime is not picking up the CA cert.
 
-**Step 1: Run `install-ca.sh`.** The `doubleagent` image automatically publishes `install-ca.sh` into the shared `certs` volume. This script installs the CA into the OS trust store AND sets the runtime-specific env vars (`NODE_EXTRA_CA_CERTS`, `REQUESTS_CA_BUNDLE`, `SSL_CERT_FILE`, `CURL_CA_BUNDLE`, `GIT_SSL_CAINFO`) — so you don't need to add them to your Compose file. The vars are persisted to `/etc/environment` and `/etc/profile.d/` so they work even when the process runs as a non-root user.
+**Step 1: Run `install-ca.sh`.** The `doubleagent` image automatically publishes `install-ca.sh` into the shared `certs` volume. This script installs the CA into the OS trust store AND sets the runtime-specific env vars (`NODE_USE_ENV_PROXY`, `NODE_USE_SYSTEM_CA`, `NODE_EXTRA_CA_CERTS`, `REQUESTS_CA_BUNDLE`, `SSL_CERT_FILE`, `CURL_CA_BUNDLE`, `GIT_SSL_CAINFO`) — so you don't need to add them to your Compose file. For Node.js, `NODE_USE_ENV_PROXY=1` makes the built-in HTTP client honor `HTTP_PROXY` / `HTTPS_PROXY` / `NO_PROXY`, `NODE_USE_SYSTEM_CA=1` lets Node trust certs from the OS store, and `NODE_EXTRA_CA_CERTS` adds the proxy CA cert directly. The vars are persisted to `/etc/environment` and `/etc/profile.d/` so they work even when the process runs as a non-root user.
 
 Source the script in your entrypoint (note the `.` — required so exports are inherited by `exec`):
 
