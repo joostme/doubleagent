@@ -1,5 +1,17 @@
 # doubleagent
 
+## 1.2.1
+
+### Patch Changes
+
+- 69c7f9a: Log blocked requests at info level with method, domain, and path.
+
+  This also updates the mitmproxy `ClientHelloData` import to the public module path and fixes the socat debug flag test expectations.
+
+- 1b7f238: Document and configure Node.js proxy and CA environment variables more completely.
+
+  `install-ca.sh` now sets `NODE_USE_ENV_PROXY=1` so Node.js honors `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY`, and `NODE_USE_SYSTEM_CA=1` so Node can use the OS trust store after the proxy CA is installed. The docs and Compose example were also updated to explain how those settings work alongside `NODE_EXTRA_CA_CERTS`.
+
 ## 1.2.0
 
 ### Minor Changes

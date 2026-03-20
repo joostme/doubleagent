@@ -1,7 +1,7 @@
 {
   "name": "doubleagent",
   "private": true,
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Release metadata and automation config for the doubleagent image",
   "scripts": {
     "changeset": "changeset",
