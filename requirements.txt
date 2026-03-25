@@ -1,2 +1,0 @@
-mitmproxy>=12,<13
-pydantic>=2,<3

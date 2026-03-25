@@ -1,18 +1,22 @@
-PYTHON ?= python
+UV ?= uv
 
-.PHONY: install test run help
+.PHONY: install lock test run help
 
 help:
 	@printf "Targets:\n"
-	@printf "  install  Install Python dependencies\n"
+	@printf "  install  Sync Python environment with uv\n"
+	@printf "  lock     Refresh uv.lock\n"
 	@printf "  test     Run unit and integration tests\n"
 	@printf "  run      Run doubleagent in local test mode\n"
 
 install:
-	$(PYTHON) -m pip install --no-cache-dir -r requirements.txt
+	$(UV) sync --locked
+
+lock:
+	$(UV) lock
 
 test:
-	$(PYTHON) -m unittest discover -s tests -v
+	$(UV) run python -m unittest discover -s tests -v
 
 run:
-	PYTHONPATH=. $(PYTHON) -m doubleagent.main --config /config/config.json
+	$(UV) run doubleagent --config /config/config.json

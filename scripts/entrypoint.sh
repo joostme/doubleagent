@@ -10,4 +10,4 @@ mkdir -p /certs
 cp /scripts/install-ca.sh /certs/install-ca.sh
 chmod +x /certs/install-ca.sh
 
-exec env PYTHONPATH=/app python -m doubleagent.main "$@"
+exec doubleagent "$@"
